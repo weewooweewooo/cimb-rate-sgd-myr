@@ -10,7 +10,12 @@ from .cimb_fetcher import CimbRateResult, fetch_cimb_rate
 from .config_loader import AppConfig, ConfigError, load_config
 from .notifier_pushover import NotificationError, send_pushover_alert
 from .state_store import AgentState, load_state, save_state
-from .time_utils import is_within_active_window, now_in_timezone
+from .time_utils import (
+    is_within_active_window,
+    next_active_start_datetime,
+    now_in_timezone,
+    seconds_until_next_active_start,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,13 +52,23 @@ def main() -> int:
                 now, config.monitoring.active_start, config.monitoring.active_end
             )
 
-            if not active_window and not args.once:
-                print(
-                    f"[{now.isoformat()}] Active window: OFF "
-                    f"({config.monitoring.active_start}-{config.monitoring.active_end}) | "
-                    "next_sleep=300s"
+            if not active_window:
+                next_start = next_active_start_datetime(
+                    now, config.monitoring.active_start, config.monitoring.active_end
                 )
-                time.sleep(300)
+                sleep_seconds = min(
+                    seconds_until_next_active_start(
+                        now, config.monitoring.active_start, config.monitoring.active_end
+                    ),
+                    1800,
+                )
+                print(
+                    "Outside active window. Sleeping until next start: "
+                    f"{next_start.isoformat(sep=' ')}"
+                )
+                if args.once:
+                    return 0
+                time.sleep(sleep_seconds)
                 continue
 
             state, sleep_seconds = run_single_check(

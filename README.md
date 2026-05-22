@@ -1,6 +1,7 @@
 # CIMB SGD->MYR Rate Hunter Agent (MVP)
 
 Local-first Python background agent that reads the public CIMB SGD->MYR rate page and sends threshold alerts via Pushover.
+The process is designed to run 24/7, while rate monitoring only runs during the configured active window (default `09:00-19:00` SGT).
 
 ## Safety Boundary
 
@@ -54,7 +55,10 @@ In dry-run mode, real Pushover secrets are not required.
 ## Adaptive Interval Behavior
 
 Outside active window:
-- sleep `300` seconds
+- do not fetch CIMB rate
+- calculate exact seconds until next `active_start`
+- sleep until then in chunks of up to 30 minutes (for graceful logs/shutdown)
+- default window is `09:00-19:00` Asia/Singapore
 
 Inside active window:
 - if `current_rate >= alert_threshold`:
