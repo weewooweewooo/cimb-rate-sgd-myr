@@ -1,6 +1,0 @@
-alerts:
-  dry_run: false
-  
-rate:
-  target_rate: 3.0900
-  buffer: 0.0009As 
