@@ -25,3 +25,4 @@ thresholds:
 alerts:
   channel: "pushover"
   cooldown_minutes: 30
+  dry_run: true
