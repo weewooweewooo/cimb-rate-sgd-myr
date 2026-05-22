@@ -1,0 +1,27 @@
+agent:
+  enabled: true
+  timezone: "Asia/Singapore"
+
+rate:
+  provider: "CIMB"
+  from_currency: "SGD"
+  to_currency: "MYR"
+  target_rate: 3.1000
+  buffer: 0.0009
+
+monitoring:
+  active_start: "09:00"
+  active_end: "19:00"
+
+intervals:
+  normal_seconds: 60
+  near_target_seconds: 15
+  critical_seconds: 5
+
+thresholds:
+  near_target_gap: 0.0050
+  critical_gap: 0.0015
+
+alerts:
+  channel: "pushover"
+  cooldown_minutes: 30
