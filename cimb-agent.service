@@ -1,0 +1,14 @@
+[Unit]
+Description=CIMB SGD->MYR Rate Hunter Agent
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cimb-rate-sgd-myr
+ExecStart=/usr/bin/python3 /opt/cimb-rate-sgd-myr/agent.py
+Restart=always
+RestartSec=3
+EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
+
+[Install]
+WantedBy=multi-user.target

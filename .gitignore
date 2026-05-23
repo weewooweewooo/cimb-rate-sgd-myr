@@ -1,20 +1,24 @@
-# Python
+# environment — never commit real tokens
+.env
+
+# playwright browser profile — generated at runtime
+.playwright/
+
+# user configs — contain real Discord IDs, never commit
+config/*.json
+
+# python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 .venv/
 venv/
 env/
 
-# Secrets
-.env
-config.yaml
-state.json
+# file locks from config_loader
+*.lock
+*.tmp
 
-# OS / editor
+# OS
 .DS_Store
-.vscode/
-.idea/
-
-# Playwright
-/test-results/
-/playwright-report/
+Thumbs.db

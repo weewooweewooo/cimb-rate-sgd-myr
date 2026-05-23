@@ -1,78 +1,112 @@
-# CIMB SGD->MYR Rate Hunter Agent (MVP)
+# cimb-rate-sgd-myr
 
-Local-first Python background agent that reads the public CIMB SGD->MYR rate page and sends threshold alerts via Pushover.
-The process is designed to run 24/7, while rate monitoring only runs during the configured active window (default `09:00-19:00` SGT).
+Python background agent that monitors the live public CIMB
+SGD→MYR exchange rate and sends Discord DM alerts when a
+user's target rate threshold is crossed.
 
-## Safety Boundary
+## Stack
 
-This project only reads the public page:
+- Python 3.11+
+- Playwright async (persistent Chromium, no page reload per cycle)
+- discord.py (slash commands + DM alerts)
+- Per-user JSON config files in config/
+- systemd for 24/7 Linux VM hosting
 
-`https://www.cimbclicks.com.sg/sgd-to-myr`
+## File structure
 
-It does **not**:
-- log in to CIMB Clicks
-- automate the CIMB mobile app
-- initiate transfers or perform banking actions
+- agent.py — main async loop, scraper, adaptive polling, alert logic
+- bot.py — Discord slash commands scoped to DM
+- notifier.py — rich embed DM sender
+- config_loader.py — atomic JSON read/write with file watcher
+- config/*.json — one file per user (gitignored)
+- .env — runtime secrets (gitignored)
 
-## What It Does
+## Setup
 
-1. Opens the public CIMB SGD->MYR page with Playwright
-2. Extracts `getObject(encodeNamespace("rateList"))?.value`
-3. Reads `rateList[0]` as current live rate
-4. Applies alert threshold formula:
+### 1. Clone and configure
 
-`alert_threshold = target_rate - buffer`
+    git clone <repo-url> /opt/cimb-rate-sgd-myr
+    cd /opt/cimb-rate-sgd-myr
+    cp .env.example .env
+    nano .env  # fill in DISCORD_BOT_TOKEN
 
-5. Monitors only inside configured active window
-6. Uses adaptive polling intervals (normal/near/critical)
-7. Sends Pushover alert on threshold hit (with cooldown)
-8. Persists local state in `state.json` to avoid alert spam
+### 2. Install dependencies
 
-## Setup (Windows PowerShell)
+    bash setup.sh
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m playwright install chromium
-Copy-Item config.example.yaml config.yaml
-Copy-Item .env.example .env
-python -m src.main --once
-python -m src.main
-```
+### 3. Add yourself as a user
 
-## Dry-Run Mode
+Create config/sean.json (or any name):
 
-- `alerts.dry_run: true` in config prints alerts to console instead of sending.
-- You can force dry-run from CLI:
+    {
+      "name": "Sean",
+      "discord_user_id": "YOUR_DISCORD_USER_ID",
+      "target_rate": 3.1000,
+      "buffer": 0.0009,
+      "active_start": "09:00",
+      "active_end": "19:00",
+      "enabled": true,
+      "cooldown_minutes": 30,
+      "last_alerted_at": null
+    }
 
-```powershell
-python -m src.main --dry-run
-```
+### 4. Run
 
-In dry-run mode, real Pushover secrets are not required.
+    python3 agent.py
 
-## Adaptive Interval Behavior
+### 5. Deploy with systemd (GCP VM)
 
-Outside active window:
-- do not fetch CIMB rate
-- calculate exact seconds until next `active_start`
-- sleep until then in chunks of up to 30 minutes (for graceful logs/shutdown)
-- default window is `09:00-19:00` Asia/Singapore
+    sudo cp cimb-agent.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable cimb-agent
+    sudo systemctl start cimb-agent
+    sudo journalctl -u cimb-agent -f
 
-Inside active window:
-- if `current_rate >= alert_threshold`:
-  - send alert only if cooldown has passed
-  - sleep `normal_seconds` or cooldown-aware interval
-- else if `current_rate >= target_rate - critical_gap`:
-  - sleep `critical_seconds`
-- else if `current_rate >= target_rate - near_target_gap`:
-  - sleep `near_target_seconds`
-- else:
-  - sleep `normal_seconds`
+## How to get your Discord user ID
 
-## CLI Flags
+1. Discord Settings → Advanced → enable Developer Mode
+2. Right-click your profile → Copy User ID
+3. Paste into discord_user_id in your config JSON
 
-- `--once` fetch one cycle and exit
-- `--headful` run Playwright in visible browser mode
-- `--dry-run` force dry-run alerts
+## Adding a new user
+
+1. Create config/<name>.json using the structure above
+2. Give them the bot's Discord username so they can DM it
+3. No restart needed — config watcher picks it up automatically
+
+## Slash commands (DM the bot)
+
+- /status — live rate, your config, last alert time
+- /settarget rate — update your target rate
+- /setbuffer value — update your buffer
+- /setwindow start end — set active window (HH:MM format)
+- /toggle on|off — enable or disable your alerts
+- /setcooldown minutes — set cooldown between alerts
+
+/setwindow controls both when you receive alerts AND when the
+scraper runs. If all users are outside their windows, the
+scraper pauses entirely to save VM resources.
+
+## Environment variables
+
+- DISCORD_BOT_TOKEN — your Discord bot token (required)
+- SCRAPE_INTERVAL_NORMAL_MS — poll interval, normal band (default 3000)
+- SCRAPE_INTERVAL_NEAR_MS — poll interval, near band (default 800)
+- SCRAPE_INTERVAL_CRITICAL_MS — poll interval, critical band (default 200)
+- IDLE_SLEEP_MS — sleep when all users outside window (default 60000)
+- MAX_NULL_STREAK — null reads before page reload (default 5)
+- TIMEZONE — active window timezone (default Asia/Singapore)
+- CIMB_RATE_URL — source page URL
+- PLAYWRIGHT_USER_DATA_DIR — Chromium profile directory
+- CONFIG_DIR — config folder path
+
+## Notes
+
+- No database — JSON files are the only state
+- last_alerted_at is written per user for cooldown tracking
+- Playwright browser stays open between polls — only JS
+  evaluation runs each cycle, not a full page load
+- Scraper pauses automatically when no users are in their
+  active window, resumes automatically when any window opens
+- Adding or editing a config file takes effect within 1 second
+  with no restart required
