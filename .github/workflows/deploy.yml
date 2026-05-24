@@ -1,0 +1,64 @@
+# GitHub Actions Workflow for Automatic Deployment to GCP VM
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#
+#   VM_HOST     — GCP VM external IP (e.g., 35.184.135.76)
+#   VM_USER     — VM username (zylee2279)
+#   VM_SSH_KEY  — Private SSH key for VM access
+#
+# To get your private SSH key from the VM:
+#   1. SSH into the VM: ssh -i <your-key> zylee2279@<VM_IP>
+#   2. Run: cat ~/.ssh/google_compute_engine
+#   3. Copy the full content (including "-----BEGIN RSA PRIVATE KEY-----" and end line)
+#   4. Go to GitHub Settings → Secrets and variables → Actions
+#   5. Create new secret "VM_SSH_KEY" and paste the full key content
+#
+# This workflow automatically deploys to the VM whenever code is pushed to main.
+
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the code from the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: SSH into the GCP VM and execute deployment commands
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # VM connection details from GitHub Secrets
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          # Allow unknown hosts on first connection
+          script_stop: true
+          # Execute deployment script
+          script: |
+            # Navigate to project directory
+            cd /opt/cimb-rate-sgd-myr
+            
+            # Pull latest code from main branch
+            echo "Pulling latest code from main..."
+            git pull origin main
+            
+            # Activate virtual environment and install dependencies
+            echo "Activating virtual environment and installing dependencies..."
+            source .venv/bin/activate
+            pip install -r requirements.txt --quiet
+            
+            # Restart the systemd service
+            echo "Restarting cimb-agent service..."
+            sudo systemctl restart cimb-agent
+            
+            # Check service status
+            echo "Checking service status..."
+            sudo systemctl status cimb-agent --no-pager
+            
+            echo "Deployment completed successfully!"

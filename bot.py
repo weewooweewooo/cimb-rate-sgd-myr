@@ -196,6 +196,45 @@ class SetMaxAlertsModal(discord.ui.Modal, title="Set Max Alerts"):
         )
 
 
+# Modal dialog for setting active days of the week
+class SetDaysModal(discord.ui.Modal, title="Set Active Days"):
+    days = discord.ui.TextInput(
+        label="Active Days",
+        placeholder="e.g. mon tue wed thu fri sat sun",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    # Validate and update active days list
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        allowed = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        input_text = str(self.days.value).strip()
+        # Split by spaces and commas
+        raw_days = [d.strip().lower() for d in input_text.replace(",", " ").split() if d.strip()]
+        
+        if not raw_days:
+            await interaction.response.send_message("Please provide at least one day.", ephemeral=True)
+            return
+        
+        invalid_days = [d for d in raw_days if d not in allowed]
+        if invalid_days:
+            await interaction.response.send_message(
+                f"Invalid days: {', '.join(invalid_days)}. Use: mon tue wed thu fri sat sun",
+                ephemeral=True
+            )
+            return
+        
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"active_days": raw_days},
+            f"Active days updated to: {', '.join(raw_days)}",
+        )
+
+
 # Interactive button menu for user settings
 class MenuView(discord.ui.View):
     def __init__(
@@ -255,6 +294,13 @@ class MenuView(discord.ui.View):
             return
         await interaction.response.send_message("Alert count reset.", ephemeral=True)
 
+    @discord.ui.button(label="Set Days", style=discord.ButtonStyle.primary, row=2)
+    async def set_days(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Open modal to set active days of the week
+        await interaction.response.send_modal(SetDaysModal(self.config_loader))
+
 
 # Discord slash commands for rate alerts and configuration
 class RateCommands(commands.Cog):
@@ -304,6 +350,7 @@ class RateCommands(commands.Cog):
             "target_rate": 3.1000,
             "active_start": "09:00",
             "active_end": "19:00",
+            "active_days": ["mon", "tue", "wed", "thu", "fri"],
             "enabled": True,
             "cooldown_minutes": 30,
             "last_alerted_at": None,
@@ -349,6 +396,7 @@ class RateCommands(commands.Cog):
             f"Updated at: {updated_at}",
             f"Target: {float(config.get('target_rate', 0.0)):.4f}",
             f"Window: {config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
+            f"Active days: {', '.join(config.get('active_days', ['mon', 'tue', 'wed', 'thu', 'fri']))}",
             f"Enabled: {bool(config.get('enabled', False))}",
             f"Cooldown (minutes): {int(config.get('cooldown_minutes', 0))}",
             f"Max alerts: {int(config.get('max_alerts', 0))} (0 = unlimited)",
@@ -496,6 +544,41 @@ class RateCommands(commands.Cog):
             f"Reset margin set to {value:.4f}", ephemeral=True
         )
 
+    # Set which days of the week to receive alerts
+    @app_commands.command(name="setdays", description="Set which days to receive alerts (e.g. mon tue wed thu fri)")
+    async def setdays(self, interaction: discord.Interaction, days: str) -> None:
+        if not await self._ensure_dm(interaction):
+            return
+        config = await self._get_user_config(interaction)
+        if config is None:
+            return
+        
+        allowed = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        # Split by spaces and commas
+        raw_days = [d.strip().lower() for d in days.replace(",", " ").split() if d.strip()]
+        
+        if not raw_days:
+            await interaction.response.send_message("Please provide at least one day.", ephemeral=True)
+            return
+        
+        invalid_days = [d for d in raw_days if d not in allowed]
+        if invalid_days:
+            await interaction.response.send_message(
+                f"Invalid days: {', '.join(invalid_days)}. Use: mon tue wed thu fri sat sun",
+                ephemeral=True
+            )
+            return
+        
+        ok = await self.bot.config_loader.update_user_fields(
+            str(interaction.user.id), {"active_days": raw_days}
+        )
+        if not ok:
+            await interaction.response.send_message("Failed to update config.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"Active days updated to: {', '.join(raw_days)}", ephemeral=True
+        )
+
     @app_commands.command(name="resetalert", description="Reset your alert count")
     async def resetalert(self, interaction: discord.Interaction) -> None:
         if not await self._ensure_dm(interaction):
@@ -537,6 +620,11 @@ class RateCommands(commands.Cog):
         embed.add_field(
             name="Window",
             value=f"{config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Active days",
+            value=f"{', '.join(config.get('active_days', ['mon', 'tue', 'wed', 'thu', 'fri']))}",
             inline=True,
         )
         embed.add_field(name="Enabled", value=str(bool(config.get("enabled", False))), inline=True)

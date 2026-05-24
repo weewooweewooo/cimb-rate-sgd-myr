@@ -94,10 +94,23 @@ def is_within_active_window(now_local: datetime, active_start: str, active_end: 
     return current_minutes >= start_minutes or current_minutes <= end_minutes
 
 
+# Check if today is within the user's active days
+def is_active_day(now_local: datetime, active_days: list) -> bool:
+    day_map = {
+        0: "mon", 1: "tue", 2: "wed",
+        3: "thu", 4: "fri", 5: "sat", 6: "sun"
+    }
+    today = day_map.get(now_local.weekday(), "")
+    return today in [d.lower().strip() for d in active_days]
+
+
 # Check if any user is within their active time window
 def any_user_active(users: List[Dict[str, Any]], now_local: datetime) -> bool:
     for user in users:
         if not bool(user.get("enabled", False)):
+            continue
+        active_days = user.get("active_days", ["mon", "tue", "wed", "thu", "fri"])
+        if not is_active_day(now_local, active_days):
             continue
         active_start = str(user.get("active_start", "00:00"))
         active_end = str(user.get("active_end", "23:59"))
@@ -249,6 +262,9 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             active_start = str(user.get("active_start", "00:00"))
                             active_end = str(user.get("active_end", "23:59"))
                             if not is_within_active_window(now_local, active_start, active_end):
+                                continue
+                            active_days = user.get("active_days", ["mon", "tue", "wed", "thu", "fri"])
+                            if not is_active_day(now_local, active_days):
                                 continue
                             cooldown_minutes = int(user.get("cooldown_minutes", 0))
                             last_alerted = parse_timestamp(user.get("last_alerted_at"))
