@@ -160,9 +160,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
 
     try:
         async with async_playwright() as playwright:
-            Path(settings.browser_data_dir).mkdir(parents=True, exist_ok=True)
-            context = await playwright.chromium.launch_persistent_context(
-                user_data_dir=settings.browser_data_dir,
+            browser = await playwright.chromium.launch(
                 headless=True,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -170,6 +168,8 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                     "--no-sandbox",
                     "--disable-gpu",
                 ],
+            )
+            context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 800},
                 locale="en-SG",
@@ -298,6 +298,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                     await asyncio.sleep(sleep_ms / 1000)
             finally:
                 await context.close()
+                await browser.close()
     finally:
         await bot.close()
         if not bot_task.done():
