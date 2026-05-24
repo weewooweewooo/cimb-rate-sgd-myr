@@ -166,6 +166,10 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                 headless=True,
                 args=[
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-gpu",
+                    "--single-process",
                 ],
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 800},
@@ -185,7 +189,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             return false;
                         }
                     }""",
-                    timeout=30000
+                    timeout=60000
                 )
                 print("[agent] rateList ready")
                 null_streak = 0
