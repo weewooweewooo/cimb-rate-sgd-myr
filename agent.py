@@ -9,29 +9,33 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytz
+import bot
 from dotenv import load_dotenv
 from playwright.async_api import Page, async_playwright
 
 from bot import build_bot
 from config_loader import ConfigLoader
-from notifier import AlertBand, AlertPayload, DiscordNotifier
+from notifier import AlertPayload, DiscordNotifier
 
 
 RATE_JS = """
 () => {
-  const list = getObject(encodeNamespace("rateList"))?.value;
-  if (!Array.isArray(list) || list.length === 0) return null;
-  return list[0];
+    try {
+        const val = getObject(encodeNamespace('rateList'))?.value;
+        if (!val) return null;
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : null;
+    } catch(e) {
+        return null;
+    }
 }
 """
 
-
+# Container for environment and configuration settings
 @dataclass
 class Settings:
     discord_bot_token: str
-    scrape_interval_normal_ms: int
-    scrape_interval_near_ms: int
-    scrape_interval_critical_ms: int
+    scrape_interval_ms: int
     idle_sleep_ms: int
     max_null_streak: int
     timezone_name: str
@@ -40,13 +44,12 @@ class Settings:
     config_dir: str
 
 
+# Load environment variables into a typed settings object
 def load_settings() -> Settings:
     load_dotenv()
     return Settings(
         discord_bot_token=os.getenv("DISCORD_BOT_TOKEN", "").strip(),
-        scrape_interval_normal_ms=int(os.getenv("SCRAPE_INTERVAL_NORMAL_MS", "3000")),
-        scrape_interval_near_ms=int(os.getenv("SCRAPE_INTERVAL_NEAR_MS", "800")),
-        scrape_interval_critical_ms=int(os.getenv("SCRAPE_INTERVAL_CRITICAL_MS", "200")),
+        scrape_interval_ms=int(os.getenv("SCRAPE_INTERVAL_MS", "3000")),
         idle_sleep_ms=int(os.getenv("IDLE_SLEEP_MS", "60000")),
         max_null_streak=int(os.getenv("MAX_NULL_STREAK", "5")),
         timezone_name=os.getenv("TIMEZONE", "Asia/Singapore").strip() or "Asia/Singapore",
@@ -56,6 +59,7 @@ def load_settings() -> Settings:
     )
 
 
+# Extract numeric exchange rate from raw JavaScript value
 def parse_rate_value(raw: Any) -> Optional[float]:
     if raw is None:
         return None
@@ -68,6 +72,7 @@ def parse_rate_value(raw: Any) -> Optional[float]:
     return float(match.group(1))
 
 
+# Parse HH:MM time string into (hours, minutes) tuple
 def parse_hhmm(value: str) -> Optional[tuple[int, int]]:
     m = re.match(r"^([01]\d|2[0-3]):([0-5]\d)$", str(value))
     if not m:
@@ -75,6 +80,7 @@ def parse_hhmm(value: str) -> Optional[tuple[int, int]]:
     return int(m.group(1)), int(m.group(2))
 
 
+# Check if current local time falls within an active time window
 def is_within_active_window(now_local: datetime, active_start: str, active_end: str) -> bool:
     start_parts = parse_hhmm(active_start)
     end_parts = parse_hhmm(active_end)
@@ -88,6 +94,7 @@ def is_within_active_window(now_local: datetime, active_start: str, active_end: 
     return current_minutes >= start_minutes or current_minutes <= end_minutes
 
 
+# Check if any user is within their active time window
 def any_user_active(users: List[Dict[str, Any]], now_local: datetime) -> bool:
     for user in users:
         if not bool(user.get("enabled", False)):
@@ -99,6 +106,7 @@ def any_user_active(users: List[Dict[str, Any]], now_local: datetime) -> bool:
     return False
 
 
+# Parse ISO 8601 timestamp string to UTC datetime object
 def parse_timestamp(ts: Optional[str]) -> Optional[datetime]:
     if not ts:
         return None
@@ -111,42 +119,18 @@ def parse_timestamp(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def determine_band(rate: float, users: List[Dict[str, Any]]) -> str:
-    band = AlertBand.NORMAL
-    for user in users:
-        if not bool(user.get("enabled", False)):
-            continue
-        target = float(user.get("target_rate", 0.0))
-        buffer_value = abs(float(user.get("buffer", 0.0)))
-        if target <= 0 or buffer_value <= 0:
-            continue
-        distance = abs(target - rate)
-        if distance <= buffer_value:
-            return AlertBand.CRITICAL
-        if distance <= buffer_value * 3:
-            band = AlertBand.NEAR
-    return band
-
-
-def band_to_sleep_ms(band: str, settings: Settings) -> int:
-    if band == AlertBand.CRITICAL:
-        return settings.scrape_interval_critical_ms
-    if band == AlertBand.NEAR:
-        return settings.scrape_interval_near_ms
-    return settings.scrape_interval_normal_ms
-
-
+# Fetch the current exchange rate by evaluating JavaScript on the page
 async def fetch_live_rate(page: Page) -> Optional[float]:
     raw = await page.evaluate(RATE_JS)
     return parse_rate_value(raw)
 
 
+# Main scraping loop: poll rate, check users, send alerts
 async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> None:
     tz = pytz.timezone(settings.timezone_name)
 
     shared_state: Dict[str, Any] = {
         "rate": None,
-        "band": AlertBand.NORMAL,
         "timestamp": "N/A",
     }
 
@@ -157,6 +141,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
     notifier = DiscordNotifier(bot)
 
     bot_task = asyncio.create_task(bot.start(settings.discord_bot_token), name="discord-bot")
+    await asyncio.sleep(0)
     await bot.wait_until_ready()
     print("[agent] bot ready — starting scrape loop")
 
@@ -166,10 +151,30 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
             context = await playwright.chromium.launch_persistent_context(
                 user_data_dir=settings.browser_data_dir,
                 headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                ],
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+                locale="en-SG",
             )
             try:
                 page = context.pages[0] if context.pages else await context.new_page()
-                await page.goto(settings.cimb_rate_url, wait_until="domcontentloaded")
+                await page.goto(settings.cimb_rate_url, wait_until="networkidle")
+                await page.wait_for_function(
+                    """() => {
+                        try {
+                            const val = getObject(encodeNamespace('rateList'))?.value;
+                            if (!val) return false;
+                            const parsed = JSON.parse(val);
+                            return Array.isArray(parsed) && parsed.length > 0;
+                        } catch(e) {
+                            return false;
+                        }
+                    }""",
+                    timeout=30000
+                )
+                print("[agent] rateList ready")
                 null_streak = 0
 
                 while True:
@@ -203,22 +208,20 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                         null_streak = 0
 
                     if rate is None:
-                        band = AlertBand.NORMAL
-                        sleep_ms = settings.scrape_interval_normal_ms
-                        shared_state.update({"rate": None, "band": band, "timestamp": timestamp.isoformat()})
+                        sleep_ms = settings.scrape_interval_ms
+                        shared_state.update({"rate": None, "timestamp": timestamp.isoformat()})
                         print(
-                            f"[{timestamp.isoformat()}] rate=None band={band} "
+                            f"[{timestamp.isoformat()}] rate=None "
                             f"next_sleep_ms={sleep_ms} users={len(users)}"
                         )
                         await asyncio.sleep(sleep_ms / 1000)
                         continue
 
-                    band = determine_band(rate, users)
-                    sleep_ms = band_to_sleep_ms(band, settings)
-                    shared_state.update({"rate": rate, "band": band, "timestamp": timestamp.isoformat()})
+                    sleep_ms = settings.scrape_interval_ms
+                    shared_state.update({"rate": rate, "timestamp": timestamp.isoformat()})
 
                     print(
-                        f"[{timestamp.isoformat()}] rate={rate:.4f} band={band} "
+                        f"[{timestamp.isoformat()}] rate={rate:.4f} "
                         f"next_sleep_ms={sleep_ms} users={len(users)}"
                     )
 
@@ -229,7 +232,19 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             target = float(user.get("target_rate", 0.0))
                             if target <= 0:
                                 continue
+                            max_alerts = int(user.get("max_alerts", 0))
+                            alert_count = int(user.get("alert_count", 0))
+                            reset_margin = float(user.get("reset_margin", 0.0010))
+                            reset_rate = target - reset_margin
+                            discord_user_id = str(user.get("discord_user_id"))
+                            if rate <= reset_rate and alert_count > 0:
+                                await config_loader.update_user_fields(
+                                    discord_user_id, {"alert_count": 0}
+                                )
+                                continue
                             if rate < target:
+                                continue
+                            if max_alerts > 0 and alert_count >= max_alerts:
                                 continue
                             active_start = str(user.get("active_start", "00:00"))
                             active_end = str(user.get("active_end", "23:59"))
@@ -242,19 +257,21 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                                 if timestamp < next_allowed:
                                     continue
                             payload = AlertPayload(
-                                discord_user_id=str(user.get("discord_user_id")),
+                                discord_user_id=discord_user_id,
                                 user_name=str(user.get("name", "User")),
                                 rate=rate,
                                 target_rate=target,
-                                band=band,
                                 active_start=active_start,
                                 active_end=active_end,
                             )
                             sent = await notifier.send_rate_alert(payload)
                             if sent:
                                 await config_loader.update_user_fields(
-                                    str(user.get("discord_user_id")),
-                                    {"last_alerted_at": timestamp.isoformat()},
+                                    discord_user_id,
+                                    {
+                                        "last_alerted_at": timestamp.isoformat(),
+                                        "alert_count": alert_count + 1,
+                                    },
                                 )
                         except Exception as exc:
                             print(f"[agent] user-processing error: {exc}")
@@ -272,6 +289,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                 pass
 
 
+# Entry point: initialize settings and config, run agent loop
 async def main() -> None:
     settings = load_settings()
     config_loader = ConfigLoader(config_dir=settings.config_dir)

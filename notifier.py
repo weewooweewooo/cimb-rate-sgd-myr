@@ -6,34 +6,23 @@ from typing import Optional
 import discord
 
 
-class AlertBand:
-    NORMAL = "NORMAL"
-    NEAR = "NEAR"
-    CRITICAL = "CRITICAL"
-
-
-BAND_COLORS = {
-    AlertBand.NORMAL: discord.Color.from_rgb(46, 204, 113),
-    AlertBand.NEAR: discord.Color.from_rgb(245, 158, 11),
-    AlertBand.CRITICAL: discord.Color.from_rgb(226, 75, 74),
-}
-
-
+# Payload containing user info and rate data for Discord alerts
 @dataclass
 class AlertPayload:
     discord_user_id: str
     user_name: str
     rate: float
     target_rate: float
-    band: str
     active_start: str
     active_end: str
 
 
+# Send Discord DM embed when rate crosses threshold
 class DiscordNotifier:
     def __init__(self, bot: discord.Client):
         self.bot = bot
 
+    # Send rate alert embed to user's Discord DM
     async def send_rate_alert(self, payload: AlertPayload) -> bool:
         user = self.bot.get_user(int(payload.discord_user_id))
         if user is None:
@@ -45,7 +34,7 @@ class DiscordNotifier:
 
         embed = discord.Embed(
             title="SGD → MYR Rate Alert",
-            color=BAND_COLORS.get(payload.band, BAND_COLORS[AlertBand.NORMAL]),
+            color=discord.Color.from_rgb(226, 75, 74),
         )
         embed.add_field(
             name="Live Rate",
@@ -55,11 +44,6 @@ class DiscordNotifier:
         embed.add_field(
             name="Your Target",
             value=f"{payload.target_rate:.4f}",
-            inline=True,
-        )
-        embed.add_field(
-            name="Band",
-            value=payload.band,
             inline=True,
         )
         embed.add_field(

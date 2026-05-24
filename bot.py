@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
@@ -7,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
+from dotenv import load_dotenv
 
 from config_loader import ConfigLoader
 
@@ -15,14 +17,251 @@ NOT_REGISTERED_MESSAGE = "You are not registered. Contact the admin to be added.
 HHMM_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
+# Check if a string matches HH:MM 24-hour time format
 def _is_valid_hhmm(value: str) -> bool:
     return bool(HHMM_PATTERN.match(value))
 
 
+# Format exchange rate as 4-decimal string or N/A if None
+def _format_live_rate(rate: Any) -> str:
+    return f"{rate:.4f}" if isinstance(rate, (int, float)) else "N/A"
+
+
+# Update user config and send response to Discord interaction
+async def _send_update_result(
+    interaction: discord.Interaction,
+    config_loader: ConfigLoader,
+    fields: Dict[str, Any],
+    success_message: str,
+) -> None:
+    ok = await config_loader.update_user_fields(str(interaction.user.id), fields)
+    if not ok:
+        await interaction.response.send_message("Failed to update config.", ephemeral=True)
+        return
+    await interaction.response.send_message(success_message, ephemeral=True)
+
+
+# Modal dialog for setting target exchange rate
+class SetTargetModal(discord.ui.Modal, title="Set Target Rate"):
+    rate = discord.ui.TextInput(
+        label="Target SGD->MYR Rate",
+        placeholder="e.g. 3.1050",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        # Validate and update target rate value
+        try:
+            rate = float(str(self.rate.value).strip())
+        except ValueError:
+            await interaction.response.send_message("Rate must be a number.", ephemeral=True)
+            return
+        if rate <= 0:
+            await interaction.response.send_message("Rate must be greater than 0.", ephemeral=True)
+            return
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"target_rate": round(rate, 4)},
+            f"Target updated to {rate:.4f}",
+        )
+
+
+# Modal dialog for setting active alert time window
+class SetWindowModal(discord.ui.Modal, title="Set Window"):
+    start = discord.ui.TextInput(
+        label="Start time (HH:MM)",
+        placeholder="e.g. 09:00",
+        required=True,
+    )
+    end = discord.ui.TextInput(
+        label="End time (HH:MM)",
+        placeholder="e.g. 19:00",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        # Validate time window format and update settings
+        start = str(self.start.value).strip()
+        end = str(self.end.value).strip()
+        if not _is_valid_hhmm(start) or not _is_valid_hhmm(end):
+            await interaction.response.send_message(
+                "Invalid time. Use HH:MM in 24-hour format.", ephemeral=True
+            )
+            return
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"active_start": start, "active_end": end},
+            f"Active window updated to {start} - {end}",
+        )
+
+
+# Modal dialog for toggling alerts on or off
+class ToggleModal(discord.ui.Modal, title="Toggle On/Off"):
+    mode = discord.ui.TextInput(
+        label="Enter on or off",
+        placeholder="on",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    # Parse and validate on/off toggle value
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        mode = str(self.mode.value).strip().lower()
+        if mode not in {"on", "off"}:
+            await interaction.response.send_message("Enter either on or off.", ephemeral=True)
+            return
+        enabled = mode == "on"
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"enabled": enabled},
+            f"Alerts {'enabled' if enabled else 'disabled'}.",
+        )
+
+
+# Modal dialog for setting cooldown minutes between alerts
+class SetCooldownModal(discord.ui.Modal, title="Set Cooldown"):
+    minutes = discord.ui.TextInput(
+        label="Cooldown minutes",
+        placeholder="e.g. 30",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    # Validate and update cooldown minutes value
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            minutes = int(str(self.minutes.value).strip())
+        except ValueError:
+            await interaction.response.send_message("Cooldown must be a whole number.", ephemeral=True)
+            return
+        if minutes < 0:
+            await interaction.response.send_message(
+                "Cooldown must be 0 or greater.", ephemeral=True
+            )
+            return
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"cooldown_minutes": minutes},
+            f"Cooldown updated to {minutes} minutes.",
+        )
+
+
+# Modal dialog for setting maximum number of alerts before reset
+class SetMaxAlertsModal(discord.ui.Modal, title="Set Max Alerts"):
+    count = discord.ui.TextInput(
+        label="Max alerts (0 = unlimited)",
+        placeholder="e.g. 3",
+        required=True,
+    )
+
+    def __init__(self, config_loader: ConfigLoader):
+        super().__init__()
+        self.config_loader = config_loader
+
+    # Validate and update maximum alerts limit
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            count = int(str(self.count.value).strip())
+        except ValueError:
+            await interaction.response.send_message("Max alerts must be a whole number.", ephemeral=True)
+            return
+        if count < 0:
+            await interaction.response.send_message(
+                "Max alerts must be 0 or greater.", ephemeral=True
+            )
+            return
+        await _send_update_result(
+            interaction,
+            self.config_loader,
+            {"max_alerts": count},
+            f"Max alerts set to {count}. (0 = unlimited)",
+        )
+
+
+# Interactive button menu for user settings
+class MenuView(discord.ui.View):
+    def __init__(
+        self,
+        config_loader: ConfigLoader,
+        user_config: Dict[str, Any],
+        snapshot: Dict[str, Any],
+    ):
+        super().__init__(timeout=120)
+        self.config_loader = config_loader
+        self.user_config = user_config
+        self.snapshot = snapshot
+
+    @discord.ui.button(label="Set Target Rate", style=discord.ButtonStyle.primary, row=0)
+    async def set_target(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Open modal to set target exchange rate
+        await interaction.response.send_modal(SetTargetModal(self.config_loader))
+
+    @discord.ui.button(label="Set Window", style=discord.ButtonStyle.primary, row=0)
+    async def set_window(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Open modal to set active time window
+        await interaction.response.send_modal(SetWindowModal(self.config_loader))
+
+    @discord.ui.button(label="Toggle On/Off", style=discord.ButtonStyle.secondary, row=0)
+    async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # Open modal to enable or disable alerts
+        await interaction.response.send_modal(ToggleModal(self.config_loader))
+
+    @discord.ui.button(label="Set Cooldown", style=discord.ButtonStyle.secondary, row=1)
+    async def set_cooldown(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Open modal to set cooldown between alerts
+        await interaction.response.send_modal(SetCooldownModal(self.config_loader))
+
+    @discord.ui.button(label="Set Max Alerts", style=discord.ButtonStyle.secondary, row=1)
+    async def set_max_alerts(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Open modal to set maximum alerts before reset
+        await interaction.response.send_modal(SetMaxAlertsModal(self.config_loader))
+
+    @discord.ui.button(label="Reset Alert Count", style=discord.ButtonStyle.danger, row=1)
+    async def reset_alert_count(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        # Reset user's alert count to zero
+        ok = await self.config_loader.update_user_fields(
+            str(interaction.user.id), {"alert_count": 0}
+        )
+        if not ok:
+            await interaction.response.send_message("Failed to update config.", ephemeral=True)
+            return
+        await interaction.response.send_message("Alert count reset.", ephemeral=True)
+
+
+# Discord slash commands for rate alerts and configuration
 class RateCommands(commands.Cog):
     def __init__(self, bot: "RateHunterBot"):
         self.bot = bot
 
+    # Verify command was issued via direct message
     async def _ensure_dm(self, interaction: discord.Interaction) -> bool:
         if interaction.guild_id is not None:
             await interaction.response.send_message(
@@ -31,6 +270,7 @@ class RateCommands(commands.Cog):
             return False
         return True
 
+    # Retrieve registered user config or notify user if not registered
     async def _get_user_config(self, interaction: discord.Interaction) -> Optional[Dict[str, Any]]:
         config = await self.bot.config_loader.get_user_by_discord_id(str(interaction.user.id))
         if config is None:
@@ -40,7 +280,57 @@ class RateCommands(commands.Cog):
                 await interaction.response.send_message(NOT_REGISTERED_MESSAGE, ephemeral=True)
             return None
         return config
+# Create new user registration with default settings
+    
+    @app_commands.command(name="register", description="Register yourself to receive CIMB rate alerts")
+    async def register(self, interaction: discord.Interaction, name: str) -> None:
+        if not await self._ensure_dm(interaction):
+            return
 
+        discord_user_id = str(interaction.user.id)
+
+        existing = await self.bot.config_loader.get_user_by_discord_id(discord_user_id)
+        if existing is not None:
+            await interaction.response.send_message(
+                f"You are already registered as {existing.get('name')}. "
+                f"Use /status to see your current config.",
+                ephemeral=True,
+            )
+            return
+
+        default_config = {
+            "name": name,
+            "discord_user_id": discord_user_id,
+            "target_rate": 3.1000,
+            "active_start": "09:00",
+            "active_end": "19:00",
+            "enabled": True,
+            "cooldown_minutes": 30,
+            "last_alerted_at": None,
+            "max_alerts": 3,
+            "alert_count": 0,
+            "reset_margin": 0.0010,
+        }
+
+        ok = await self.bot.config_loader.create_user(discord_user_id, default_config)
+        if not ok:
+            await interaction.response.send_message(
+                "Failed to create your config. Contact the admin.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            f"Registered as **{name}**!\n\n"
+            f"Default settings:\n"
+            f"Target rate: 3.1000\n"
+            f"Active window: 09:00 - 19:00\n"
+            f"Cooldown: 30 minutes\n\n"
+            f"Use /menu to customize your config.",
+            ephemeral=True,
+        )
+# Display current exchange rate and user's alert configuration
+    
     @app_commands.command(name="status", description="Show current rate and your alert config")
     async def status(self, interaction: discord.Interaction) -> None:
         if not await self._ensure_dm(interaction):
@@ -51,24 +341,25 @@ class RateCommands(commands.Cog):
 
         snapshot = self.bot.snapshot_provider()
         rate = snapshot.get("rate")
-        band = snapshot.get("band", "NORMAL")
         updated_at = snapshot.get("timestamp", "N/A")
         last_alerted = config.get("last_alerted_at") or "Never"
 
         lines = [
-            f"Live rate: {rate:.4f}" if isinstance(rate, (int, float)) else "Live rate: N/A",
-            f"Band: {band}",
+            f"Live rate: {_format_live_rate(rate)}",
             f"Updated at: {updated_at}",
             f"Target: {float(config.get('target_rate', 0.0)):.4f}",
-            f"Buffer: {float(config.get('buffer', 0.0)):.4f}",
-            f"Window: {config.get('active_start', '00:00')} – {config.get('active_end', '23:59')}",
+            f"Window: {config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
             f"Enabled: {bool(config.get('enabled', False))}",
             f"Cooldown (minutes): {int(config.get('cooldown_minutes', 0))}",
+            f"Max alerts: {int(config.get('max_alerts', 0))} (0 = unlimited)",
+            f"Alert count: {int(config.get('alert_count', 0))}",
+            f"Reset margin: {float(config.get('reset_margin', 0.0010)):.4f}",
             f"Last alerted: {last_alerted}",
         ]
+    # Update target exchange rate that triggers alerts
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-    @app_commands.command(name="settarget", description="Set your target SGD→MYR rate")
+    @app_commands.command(name="settarget", description="Set your target SGD->MYR rate")
     async def settarget(self, interaction: discord.Interaction, rate: float) -> None:
         if not await self._ensure_dm(interaction):
             return
@@ -84,25 +375,8 @@ class RateCommands(commands.Cog):
         if not ok:
             await interaction.response.send_message("Failed to update config.", ephemeral=True)
             return
+    # Set time window when alerts are allowed
         await interaction.response.send_message(f"Target updated to {rate:.4f}", ephemeral=True)
-
-    @app_commands.command(name="setbuffer", description="Set your alert buffer")
-    async def setbuffer(self, interaction: discord.Interaction, value: float) -> None:
-        if not await self._ensure_dm(interaction):
-            return
-        config = await self._get_user_config(interaction)
-        if config is None:
-            return
-        if value <= 0:
-            await interaction.response.send_message("Buffer must be greater than 0.", ephemeral=True)
-            return
-        ok = await self.bot.config_loader.update_user_fields(
-            str(interaction.user.id), {"buffer": round(value, 4)}
-        )
-        if not ok:
-            await interaction.response.send_message("Failed to update config.", ephemeral=True)
-            return
-        await interaction.response.send_message(f"Buffer updated to {value:.4f}", ephemeral=True)
 
     @app_commands.command(name="setwindow", description="Set active alert window (HH:MM HH:MM)")
     async def setwindow(self, interaction: discord.Interaction, start: str, end: str) -> None:
@@ -123,7 +397,8 @@ class RateCommands(commands.Cog):
             await interaction.response.send_message("Failed to update config.", ephemeral=True)
             return
         await interaction.response.send_message(
-            f"Active window updated to {start} – {end}", ephemeral=True
+    # Enable or disable rate monitoring
+            f"Active window updated to {start} - {end}", ephemeral=True
         )
 
     @app_commands.command(name="toggle", description="Enable or disable your alerts")
@@ -148,6 +423,7 @@ class RateCommands(commands.Cog):
             await interaction.response.send_message("Failed to update config.", ephemeral=True)
             return
         await interaction.response.send_message(
+    # Set minimum time between consecutive alerts
             f"Alerts {'enabled' if enabled else 'disabled'}.", ephemeral=True
         )
 
@@ -169,11 +445,127 @@ class RateCommands(commands.Cog):
         if not ok:
             await interaction.response.send_message("Failed to update config.", ephemeral=True)
             return
+    # Set maximum alerts before automatic reset
         await interaction.response.send_message(
             f"Cooldown updated to {minutes} minutes.", ephemeral=True
         )
 
+    @app_commands.command(name="setmaxalerts", description="Set maximum alerts before reset")
+    async def setmaxalerts(self, interaction: discord.Interaction, count: int) -> None:
+        if not await self._ensure_dm(interaction):
+            return
+        config = await self._get_user_config(interaction)
+        if config is None:
+            return
+        if count < 0:
+            await interaction.response.send_message(
+                "Max alerts must be 0 or greater.", ephemeral=True
+            )
+            return
+        ok = await self.bot.config_loader.update_user_fields(
+            str(interaction.user.id), {"max_alerts": count}
+        )
+        if not ok:
+            await interaction.response.send_message("Failed to update config.", ephemeral=True)
+            return
+    # Set rate drop margin needed to reset alert counter
+        await interaction.response.send_message(
+            f"Max alerts set to {count}. (0 = unlimited)", ephemeral=True
+        )
 
+    @app_commands.command(name="setresetmargin", description="Set rate drop needed to reset alert count")
+    async def setresetmargin(self, interaction: discord.Interaction, value: float) -> None:
+        if not await self._ensure_dm(interaction):
+            return
+        config = await self._get_user_config(interaction)
+        if config is None:
+            return
+        if value <= 0:
+            await interaction.response.send_message(
+                "Reset margin must be greater than 0.", ephemeral=True
+            )
+            return
+        ok = await self.bot.config_loader.update_user_fields(
+            str(interaction.user.id), {"reset_margin": round(value, 4)}
+        )
+        if not ok:
+            await interaction.response.send_message("Failed to update config.", ephemeral=True)
+    # Manually reset alert count to zero
+            return
+        await interaction.response.send_message(
+            f"Reset margin set to {value:.4f}", ephemeral=True
+        )
+
+    @app_commands.command(name="resetalert", description="Reset your alert count")
+    async def resetalert(self, interaction: discord.Interaction) -> None:
+        if not await self._ensure_dm(interaction):
+            return
+        config = await self._get_user_config(interaction)
+        if config is None:
+            return
+        ok = await self.bot.config_loader.update_user_fields(
+            str(interaction.user.id), {"alert_count": 0}
+        )
+        if not ok:
+            await interaction.response.send_message("Failed to update config.", ephemeral=True)
+    # Open interactive button menu for configuration
+            return
+        await interaction.response.send_message(
+            "Alert count reset. Alerts will resume.", ephemeral=True
+        )
+
+    @app_commands.command(name="menu", description="Open your CIMB rate alert settings menu")
+    async def menu(self, interaction: discord.Interaction) -> None:
+        if not await self._ensure_dm(interaction):
+            return
+        config = await self._get_user_config(interaction)
+        if config is None:
+            return
+
+        snapshot = self.bot.snapshot_provider()
+        rate = snapshot.get("rate")
+        updated_at = snapshot.get("timestamp", "N/A")
+
+        embed = discord.Embed(title="CIMB Rate Hunter — Your Settings")
+        embed.add_field(name="Live rate", value=_format_live_rate(rate), inline=True)
+        embed.add_field(name="Updated at", value=str(updated_at), inline=False)
+        embed.add_field(
+            name="Target",
+            value=f"{float(config.get('target_rate', 0.0)):.4f}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Window",
+            value=f"{config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
+            inline=True,
+        )
+        embed.add_field(name="Enabled", value=str(bool(config.get("enabled", False))), inline=True)
+        embed.add_field(
+            name="Cooldown",
+            value=f"{int(config.get('cooldown_minutes', 0))} minutes",
+            inline=True,
+        )
+        embed.add_field(
+            name="Max alerts",
+            value=f"{int(config.get('max_alerts', 0))} (0 = unlimited)",
+            inline=True,
+        )
+        embed.add_field(
+            name="Alert count",
+            value=str(int(config.get("alert_count", 0))),
+            inline=True,
+        )
+        embed.add_field(
+            name="Reset margin",
+            value=f"{float(config.get('reset_margin', 0.0010)):.4f}",
+            inline=True,
+        )
+
+        view = MenuView(self.bot.config_loader, config, snapshot)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# Discord bot with slash commands and minimal intents
 class RateHunterBot(commands.Bot):
     def __init__(
         self,
@@ -183,17 +575,28 @@ class RateHunterBot(commands.Bot):
         intents = discord.Intents.none()
         super().__init__(command_prefix="!", intents=intents)
         self.config_loader = config_loader
+        # Load environment and sync slash commands to Discord
         self.snapshot_provider = snapshot_provider
 
     async def setup_hook(self) -> None:
+        load_dotenv()
         await self.add_cog(RateCommands(self))
         synced = await self.tree.sync()
         print(f"[bot] synced {len(synced)} global slash command(s)")
+
+        guild_id = os.getenv("DISCORD_GUILD_ID", "").strip()
+        if guild_id:
+            guild = discord.Object(id=int(guild_id))
+            self.tree.copy_global_to(guild=guild)
+        # Log successful bot connection with timestamp
+            guild_synced = await self.tree.sync(guild=guild)
+            print(f"[bot] synced {len(guild_synced)} guild slash command(s)")
 
     async def on_ready(self) -> None:
         print(f"[bot] logged in as {self.user} at {datetime.utcnow().isoformat()}Z")
 
 
+# Factory function to create and configure the Discord bot
 def build_bot(
     config_loader: ConfigLoader,
     snapshot_provider: Callable[[], Dict[str, Any]],
