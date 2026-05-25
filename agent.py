@@ -17,7 +17,6 @@ from bot import build_bot
 from config_loader import ConfigLoader
 from notifier import AlertPayload, DiscordNotifier
 
-
 RATE_JS = """
 () => {
     try {
@@ -31,6 +30,7 @@ RATE_JS = """
 }
 """
 
+
 # Container for environment and configuration settings
 @dataclass
 class Settings:
@@ -42,6 +42,7 @@ class Settings:
     cimb_rate_url: str
     browser_data_dir: str
     config_dir: str
+    page_reload_interval_ms: int
 
 
 # Load environment variables into a typed settings object
@@ -52,10 +53,15 @@ def load_settings() -> Settings:
         scrape_interval_ms=int(os.getenv("SCRAPE_INTERVAL_MS", "3000")),
         idle_sleep_ms=int(os.getenv("IDLE_SLEEP_MS", "60000")),
         max_null_streak=int(os.getenv("MAX_NULL_STREAK", "5")),
-        timezone_name=os.getenv("TIMEZONE", "Asia/Singapore").strip() or "Asia/Singapore",
-        cimb_rate_url=os.getenv("CIMB_RATE_URL", "https://www.cimbclicks.com.sg/sgd-to-myr").strip(),
-        browser_data_dir=os.getenv("PLAYWRIGHT_USER_DATA_DIR", ".playwright").strip() or ".playwright",
+        timezone_name=os.getenv("TIMEZONE", "Asia/Singapore").strip()
+        or "Asia/Singapore",
+        cimb_rate_url=os.getenv(
+            "CIMB_RATE_URL", "https://www.cimbclicks.com.sg/sgd-to-myr"
+        ).strip(),
+        browser_data_dir=os.getenv("PLAYWRIGHT_USER_DATA_DIR", ".playwright").strip()
+        or ".playwright",
         config_dir=os.getenv("CONFIG_DIR", "config").strip() or "config",
+        page_reload_interval_ms=int(os.getenv("PAGE_RELOAD_INTERVAL_MS", "300000")),
     )
 
 
@@ -81,7 +87,9 @@ def parse_hhmm(value: str) -> Optional[tuple[int, int]]:
 
 
 # Check if current local time falls within an active time window
-def is_within_active_window(now_local: datetime, active_start: str, active_end: str) -> bool:
+def is_within_active_window(
+    now_local: datetime, active_start: str, active_end: str
+) -> bool:
     start_parts = parse_hhmm(active_start)
     end_parts = parse_hhmm(active_end)
     if not start_parts or not end_parts:
@@ -96,10 +104,7 @@ def is_within_active_window(now_local: datetime, active_start: str, active_end: 
 
 # Check if today is within the user's active days
 def is_active_day(now_local: datetime, active_days: list) -> bool:
-    day_map = {
-        0: "mon", 1: "tue", 2: "wed",
-        3: "thu", 4: "fri", 5: "sat", 6: "sun"
-    }
+    day_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
     today = day_map.get(now_local.weekday(), "")
     return today in [d.lower().strip() for d in active_days]
 
@@ -153,7 +158,9 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
     bot = build_bot(config_loader, lambda: dict(shared_state))
     notifier = DiscordNotifier(bot)
 
-    bot_task = asyncio.create_task(bot.start(settings.discord_bot_token), name="discord-bot")
+    bot_task = asyncio.create_task(
+        bot.start(settings.discord_bot_token), name="discord-bot"
+    )
     await asyncio.sleep(0)
     await bot.wait_until_ready()
     print("[agent] bot ready — starting scrape loop")
@@ -188,15 +195,37 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             return false;
                         }
                     }""",
-                    timeout=60000
+                    timeout=60000,
                 )
                 print("[agent] rateList ready")
                 null_streak = 0
+                last_reload_at = datetime.utcnow().replace(tzinfo=pytz.UTC)
 
                 while True:
                     timestamp = datetime.utcnow().replace(tzinfo=pytz.UTC)
                     users = await config_loader.get_all_users()
                     now_local = timestamp.astimezone(tz)
+
+                    # Reload page if interval has passed to get fresh rate data
+                    elapsed_ms = (timestamp - last_reload_at).total_seconds() * 1000
+                    if elapsed_ms >= settings.page_reload_interval_ms:
+                        print(f"[agent] reloading page for fresh rate data")
+                        await page.reload(wait_until="networkidle")
+                        await page.wait_for_function(
+                            """() => {
+                                try {
+                                    const val = getObject(encodeNamespace('rateList'))?.value;
+                                    if (!val) return false;
+                                    const parsed = JSON.parse(val);
+                                    return Array.isArray(parsed) && parsed.length > 0;
+                                } catch(e) {
+                                    return false;
+                                }
+                            }""",
+                            timeout=60000,
+                        )
+                        last_reload_at = timestamp
+                        print(f"[agent] page reloaded successfully")
 
                     if not any_user_active(users, now_local):
                         print(
@@ -225,7 +254,9 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
 
                     if rate is None:
                         sleep_ms = settings.scrape_interval_ms
-                        shared_state.update({"rate": None, "timestamp": timestamp.isoformat()})
+                        shared_state.update(
+                            {"rate": None, "timestamp": timestamp.isoformat()}
+                        )
                         print(
                             f"[{timestamp.isoformat()}] rate=None "
                             f"next_sleep_ms={sleep_ms} users={len(users)}"
@@ -234,7 +265,9 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                         continue
 
                     sleep_ms = settings.scrape_interval_ms
-                    shared_state.update({"rate": rate, "timestamp": timestamp.isoformat()})
+                    shared_state.update(
+                        {"rate": rate, "timestamp": timestamp.isoformat()}
+                    )
 
                     print(
                         f"[{timestamp.isoformat()}] rate={rate:.4f} "
@@ -264,15 +297,21 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                                 continue
                             active_start = str(user.get("active_start", "00:00"))
                             active_end = str(user.get("active_end", "23:59"))
-                            if not is_within_active_window(now_local, active_start, active_end):
+                            if not is_within_active_window(
+                                now_local, active_start, active_end
+                            ):
                                 continue
-                            active_days = user.get("active_days", ["mon", "tue", "wed", "thu", "fri"])
+                            active_days = user.get(
+                                "active_days", ["mon", "tue", "wed", "thu", "fri"]
+                            )
                             if not is_active_day(now_local, active_days):
                                 continue
                             cooldown_minutes = int(user.get("cooldown_minutes", 0))
                             last_alerted = parse_timestamp(user.get("last_alerted_at"))
                             if last_alerted is not None and cooldown_minutes > 0:
-                                next_allowed = last_alerted + timedelta(minutes=cooldown_minutes)
+                                next_allowed = last_alerted + timedelta(
+                                    minutes=cooldown_minutes
+                                )
                                 if timestamp < next_allowed:
                                     continue
                             payload = AlertPayload(
