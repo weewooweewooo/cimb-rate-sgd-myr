@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -200,6 +200,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                 print("[agent] rateList ready")
                 null_streak = 0
                 last_reload_at = datetime.utcnow().replace(tzinfo=pytz.UTC)
+                last_logged_rate: Optional[float] = None
 
                 while True:
                     timestamp = datetime.utcnow().replace(tzinfo=pytz.UTC)
@@ -209,7 +210,6 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                     # Reload page if interval has passed to get fresh rate data
                     elapsed_ms = (timestamp - last_reload_at).total_seconds() * 1000
                     if elapsed_ms >= settings.page_reload_interval_ms:
-                        print(f"[agent] reloading page for fresh rate data")
                         await page.reload(wait_until="networkidle")
                         await page.wait_for_function(
                             """() => {
@@ -225,7 +225,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             timeout=60000,
                         )
                         last_reload_at = timestamp
-                        print(f"[agent] page reloaded successfully")
+                        print("[agent] page reloaded")
 
                     if not any_user_active(users, now_local):
                         print(
@@ -269,10 +269,12 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                         {"rate": rate, "timestamp": timestamp.isoformat()}
                     )
 
-                    print(
-                        f"[{timestamp.isoformat()}] rate={rate:.4f} "
-                        f"next_sleep_ms={sleep_ms} users={len(users)}"
-                    )
+                    if rate != last_logged_rate:
+                        print(
+                            f"[{timestamp.isoformat()}] rate={rate:.4f} "
+                            f"next_sleep_ms={sleep_ms} users={len(users)}"
+                        )
+                        last_logged_rate = rate
 
                     for user in users:
                         try:
@@ -281,20 +283,19 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             target = float(user.get("target_rate", 0.0))
                             if target <= 0:
                                 continue
-                            max_alerts = int(user.get("max_alerts", 0))
-                            alert_count = int(user.get("alert_count", 0))
-                            reset_margin = float(user.get("reset_margin", 0.0010))
-                            reset_rate = target - reset_margin
+                            peak_rate = float(user.get("peak_rate", 0.0))
                             discord_user_id = str(user.get("discord_user_id"))
-                            if rate <= reset_rate and alert_count > 0:
-                                await config_loader.update_user_fields(
-                                    discord_user_id, {"alert_count": 0}
-                                )
-                                continue
+
                             if rate < target:
+                                if peak_rate > 0:
+                                    await config_loader.update_user_fields(
+                                        discord_user_id, {"peak_rate": 0.0}
+                                    )
                                 continue
-                            if max_alerts > 0 and alert_count >= max_alerts:
+
+                            if rate <= peak_rate:
                                 continue
+
                             active_start = str(user.get("active_start", "00:00"))
                             active_end = str(user.get("active_end", "23:59"))
                             if not is_within_active_window(
@@ -306,14 +307,7 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                             )
                             if not is_active_day(now_local, active_days):
                                 continue
-                            cooldown_minutes = int(user.get("cooldown_minutes", 0))
-                            last_alerted = parse_timestamp(user.get("last_alerted_at"))
-                            if last_alerted is not None and cooldown_minutes > 0:
-                                next_allowed = last_alerted + timedelta(
-                                    minutes=cooldown_minutes
-                                )
-                                if timestamp < next_allowed:
-                                    continue
+
                             payload = AlertPayload(
                                 discord_user_id=discord_user_id,
                                 user_name=str(user.get("name", "User")),
@@ -327,8 +321,8 @@ async def run_agent_loop(settings: Settings, config_loader: ConfigLoader) -> Non
                                 await config_loader.update_user_fields(
                                     discord_user_id,
                                     {
+                                        "peak_rate": rate,
                                         "last_alerted_at": timestamp.isoformat(),
-                                        "alert_count": alert_count + 1,
                                     },
                                 )
                         except Exception as exc:

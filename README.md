@@ -121,11 +121,8 @@ Create a new file `config/sean.json` (replace `sean` with your name):
   "active_end": "19:00",
   "active_days": ["mon", "tue", "wed", "thu", "fri"],
   "enabled": true,
-  "cooldown_minutes": 30,
   "last_alerted_at": null,
-  "max_alerts": 3,
-  "alert_count": 0,
-  "reset_margin": 0.0010
+  "peak_rate": 0.0
 }
 ```
 
@@ -138,15 +135,14 @@ python agent.py
 **Expected output:**
 
 ```
-[bot] synced 10 global slash command(s)
+[bot] synced 7 global slash command(s)
 [agent] bot ready — starting scrape loop
 [bot] logged in as CIMB Rate Bot
 [agent] rateList ready
 [2026-05-24 14:32:01] rate=3.0820 next_sleep_ms=3000 users=1
-[2026-05-24 14:32:04] rate=3.0820 next_sleep_ms=3000 users=1
 ```
 
-The bot will start polling the CIMB rate every 3 seconds. If you see `rate=3.0820` (or similar), it's working!
+The bot will start polling the CIMB rate every 3 seconds. Rate lines are logged only when the rate changes.
 
 ## User Config File Reference
 
@@ -161,11 +157,8 @@ Each user has their own JSON config file in the `config/` directory. Here's the 
   "active_end": "19:00",
   "active_days": ["mon", "tue", "wed", "thu", "fri"],
   "enabled": true,
-  "cooldown_minutes": 30,
   "last_alerted_at": null,
-  "max_alerts": 3,
-  "alert_count": 0,
-  "reset_margin": 0.0010
+  "peak_rate": 0.0
 }
 ```
 
@@ -180,11 +173,8 @@ Each user has their own JSON config file in the `config/` directory. Here's the 
 | `active_end` | string | Stop monitoring at this time (HH:MM format, 24-hour) | 19:00 |
 | `active_days` | array of strings | Days to monitor: `["mon", "tue", "wed", "thu", "fri"]` for weekdays only, or `["mon", "tue", "wed", "thu", "fri", "sat", "sun"]` for every day | weekdays |
 | `enabled` | boolean | Enable or disable alerts for this user | true |
-| `cooldown_minutes` | int | Minimum minutes between consecutive alerts for the same rate | 30 |
 | `last_alerted_at` | string or null | Timestamp of last alert (managed by bot, don't edit) | null |
-| `max_alerts` | int | Maximum alerts per rate crossing (0 = unlimited) | 3 |
-| `alert_count` | int | Current alert count for this rate crossing (managed by bot, don't edit) | 0 |
-| `reset_margin` | float | How far the rate must drop below target before resetting the alert counter | 0.0010 |
+| `peak_rate` | float | Highest alerted rate since the rate last dropped below target | 0.0 |
 
 ## Environment Variables
 
@@ -215,10 +205,8 @@ All commands are available in Discord DMs with the bot. Here's the full list:
 | `/setwindow start end` | Set your active monitoring window in HH:MM format (e.g., 09:00 19:00) |
 | `/setdays days` | Set which days to monitor (e.g., mon tue wed thu fri) |
 | `/toggle on/off` | Enable or disable your alerts |
-| `/setcooldown minutes` | Set cooldown between consecutive alerts |
-| `/setmaxalerts count` | Set maximum alerts per rate crossing (0 = unlimited) |
-| `/setresetmargin value` | Set how far the rate must drop to reset the alert counter |
-| `/resetalert` | Manually reset the alert count for the current rate |
+
+`/status` includes the current `Peak rate` field.
 
 All commands require you to be in the same Discord server as the bot and work in DMs with the bot.
 
@@ -331,11 +319,8 @@ Paste your user config JSON:
   "active_end": "19:00",
   "active_days": ["mon", "tue", "wed", "thu", "fri"],
   "enabled": true,
-  "cooldown_minutes": 30,
   "last_alerted_at": null,
-  "max_alerts": 3,
-  "alert_count": 0,
-  "reset_margin": 0.0010
+  "peak_rate": 0.0
 }
 ```
 

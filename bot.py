@@ -139,74 +139,6 @@ class ToggleModal(discord.ui.Modal, title="Toggle On/Off"):
         )
 
 
-# Modal dialog for setting cooldown minutes between alerts
-class SetCooldownModal(discord.ui.Modal, title="Set Cooldown"):
-    minutes = discord.ui.TextInput(
-        label="Cooldown minutes",
-        placeholder="e.g. 30",
-        required=True,
-    )
-
-    def __init__(self, config_loader: ConfigLoader):
-        super().__init__()
-        self.config_loader = config_loader
-
-    # Validate and update cooldown minutes value
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            minutes = int(str(self.minutes.value).strip())
-        except ValueError:
-            await interaction.response.send_message(
-                "Cooldown must be a whole number.", ephemeral=True
-            )
-            return
-        if minutes < 0:
-            await interaction.response.send_message(
-                "Cooldown must be 0 or greater.", ephemeral=True
-            )
-            return
-        await _send_update_result(
-            interaction,
-            self.config_loader,
-            {"cooldown_minutes": minutes},
-            f"Cooldown updated to {minutes} minutes.",
-        )
-
-
-# Modal dialog for setting maximum number of alerts before reset
-class SetMaxAlertsModal(discord.ui.Modal, title="Set Max Alerts"):
-    count = discord.ui.TextInput(
-        label="Max alerts (0 = unlimited)",
-        placeholder="e.g. 3",
-        required=True,
-    )
-
-    def __init__(self, config_loader: ConfigLoader):
-        super().__init__()
-        self.config_loader = config_loader
-
-    # Validate and update maximum alerts limit
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            count = int(str(self.count.value).strip())
-        except ValueError:
-            await interaction.response.send_message(
-                "Max alerts must be a whole number.", ephemeral=True
-            )
-            return
-        if count < 0:
-            await interaction.response.send_message(
-                "Max alerts must be 0 or greater.", ephemeral=True
-            )
-            return
-        await _send_update_result(
-            interaction,
-            self.config_loader,
-            {"max_alerts": count},
-            f"Max alerts set to {count}. (0 = unlimited)",
-        )
-
-
 # Interactive button-based day selector for setting active days of the week
 class DaySelectView(discord.ui.View):
     DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -340,40 +272,7 @@ class MenuView(discord.ui.View):
         # Open modal to enable or disable alerts
         await interaction.response.send_modal(ToggleModal(self.config_loader))
 
-    @discord.ui.button(label="Set Cooldown", style=discord.ButtonStyle.secondary, row=1)
-    async def set_cooldown(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ) -> None:
-        # Open modal to set cooldown between alerts
-        await interaction.response.send_modal(SetCooldownModal(self.config_loader))
-
-    @discord.ui.button(
-        label="Set Max Alerts", style=discord.ButtonStyle.secondary, row=1
-    )
-    async def set_max_alerts(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ) -> None:
-        # Open modal to set maximum alerts before reset
-        await interaction.response.send_modal(SetMaxAlertsModal(self.config_loader))
-
-    @discord.ui.button(
-        label="Reset Alert Count", style=discord.ButtonStyle.danger, row=1
-    )
-    async def reset_alert_count(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ) -> None:
-        # Reset user's alert count to zero
-        ok = await self.config_loader.update_user_fields(
-            str(interaction.user.id), {"alert_count": 0}
-        )
-        if not ok:
-            await interaction.response.send_message(
-                "Failed to update config.", ephemeral=True
-            )
-            return
-        await interaction.response.send_message("Alert count reset.", ephemeral=True)
-
-    @discord.ui.button(label="Set Days", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Set Days", style=discord.ButtonStyle.primary, row=1)
     async def set_days(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -458,11 +357,8 @@ class RateCommands(commands.Cog):
             "active_end": "19:00",
             "active_days": ["mon", "tue", "wed", "thu", "fri"],
             "enabled": True,
-            "cooldown_minutes": 30,
             "last_alerted_at": None,
-            "max_alerts": 3,
-            "alert_count": 0,
-            "reset_margin": 0.0010,
+            "peak_rate": 0.0,
         }
 
         ok = await self.bot.config_loader.create_user(discord_user_id, default_config)
@@ -477,8 +373,7 @@ class RateCommands(commands.Cog):
             f"Registered as **{name}**!\n\n"
             f"Default settings:\n"
             f"Target rate: 3.1000\n"
-            f"Active window: 09:00 - 19:00\n"
-            f"Cooldown: 30 minutes\n\n"
+            f"Active window: 09:00 - 19:00\n\n"
             f"Use /menu to customize your config.",
             ephemeral=True,
         )
@@ -507,10 +402,7 @@ class RateCommands(commands.Cog):
             f"Window: {config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
             f"Active days: {', '.join(config.get('active_days', ['mon', 'tue', 'wed', 'thu', 'fri']))}",
             f"Enabled: {bool(config.get('enabled', False))}",
-            f"Cooldown (minutes): {int(config.get('cooldown_minutes', 0))}",
-            f"Max alerts: {int(config.get('max_alerts', 0))} (0 = unlimited)",
-            f"Alert count: {int(config.get('alert_count', 0))}",
-            f"Reset margin: {float(config.get('reset_margin', 0.0010)):.4f}",
+            f"Peak rate: {float(config.get('peak_rate', 0.0)):.4f}",
             f"Last alerted: {last_alerted}",
         ]
         # Update target exchange rate that triggers alerts
@@ -602,89 +494,6 @@ class RateCommands(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(
-        name="setcooldown", description="Set cooldown between alerts in minutes"
-    )
-    async def setcooldown(self, interaction: discord.Interaction, minutes: int) -> None:
-        if not await self._ensure_dm(interaction):
-            return
-        config = await self._get_user_config(interaction)
-        if config is None:
-            return
-        if minutes < 0:
-            await interaction.response.send_message(
-                "Cooldown must be 0 or greater.", ephemeral=True
-            )
-            return
-        ok = await self.bot.config_loader.update_user_fields(
-            str(interaction.user.id), {"cooldown_minutes": minutes}
-        )
-        if not ok:
-            await interaction.response.send_message(
-                "Failed to update config.", ephemeral=True
-            )
-            return
-        # Set maximum alerts before automatic reset
-        await interaction.response.send_message(
-            f"Cooldown updated to {minutes} minutes.", ephemeral=True
-        )
-
-    @app_commands.command(
-        name="setmaxalerts", description="Set maximum alerts before reset"
-    )
-    async def setmaxalerts(self, interaction: discord.Interaction, count: int) -> None:
-        if not await self._ensure_dm(interaction):
-            return
-        config = await self._get_user_config(interaction)
-        if config is None:
-            return
-        if count < 0:
-            await interaction.response.send_message(
-                "Max alerts must be 0 or greater.", ephemeral=True
-            )
-            return
-        ok = await self.bot.config_loader.update_user_fields(
-            str(interaction.user.id), {"max_alerts": count}
-        )
-        if not ok:
-            await interaction.response.send_message(
-                "Failed to update config.", ephemeral=True
-            )
-            return
-        # Set rate drop margin needed to reset alert counter
-        await interaction.response.send_message(
-            f"Max alerts set to {count}. (0 = unlimited)", ephemeral=True
-        )
-
-    @app_commands.command(
-        name="setresetmargin", description="Set rate drop needed to reset alert count"
-    )
-    async def setresetmargin(
-        self, interaction: discord.Interaction, value: float
-    ) -> None:
-        if not await self._ensure_dm(interaction):
-            return
-        config = await self._get_user_config(interaction)
-        if config is None:
-            return
-        if value <= 0:
-            await interaction.response.send_message(
-                "Reset margin must be greater than 0.", ephemeral=True
-            )
-            return
-        ok = await self.bot.config_loader.update_user_fields(
-            str(interaction.user.id), {"reset_margin": round(value, 4)}
-        )
-        if not ok:
-            await interaction.response.send_message(
-                "Failed to update config.", ephemeral=True
-            )
-            # Manually reset alert count to zero
-            return
-        await interaction.response.send_message(
-            f"Reset margin set to {value:.4f}", ephemeral=True
-        )
-
     # Set which days of the week to receive alerts
     @app_commands.command(
         name="setdays",
@@ -729,26 +538,6 @@ class RateCommands(commands.Cog):
             f"Active days updated to: {', '.join(raw_days)}", ephemeral=True
         )
 
-    @app_commands.command(name="resetalert", description="Reset your alert count")
-    async def resetalert(self, interaction: discord.Interaction) -> None:
-        if not await self._ensure_dm(interaction):
-            return
-        config = await self._get_user_config(interaction)
-        if config is None:
-            return
-        ok = await self.bot.config_loader.update_user_fields(
-            str(interaction.user.id), {"alert_count": 0}
-        )
-        if not ok:
-            await interaction.response.send_message(
-                "Failed to update config.", ephemeral=True
-            )
-            # Open interactive button menu for configuration
-            return
-        await interaction.response.send_message(
-            "Alert count reset. Alerts will resume.", ephemeral=True
-        )
-
     @app_commands.command(
         name="menu", description="Open your CIMB rate alert settings menu"
     )
@@ -785,23 +574,8 @@ class RateCommands(commands.Cog):
             name="Enabled", value=str(bool(config.get("enabled", False))), inline=True
         )
         embed.add_field(
-            name="Cooldown",
-            value=f"{int(config.get('cooldown_minutes', 0))} minutes",
-            inline=True,
-        )
-        embed.add_field(
-            name="Max alerts",
-            value=f"{int(config.get('max_alerts', 0))} (0 = unlimited)",
-            inline=True,
-        )
-        embed.add_field(
-            name="Alert count",
-            value=str(int(config.get("alert_count", 0))),
-            inline=True,
-        )
-        embed.add_field(
-            name="Reset margin",
-            value=f"{float(config.get('reset_margin', 0.0010)):.4f}",
+            name="Peak rate",
+            value=f"{float(config.get('peak_rate', 0.0)):.4f}",
             inline=True,
         )
 
