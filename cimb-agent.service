@@ -1,5 +1,5 @@
 [Unit]
-Description=CIMB SGD->MYR Rate Hunter Agent
+Description=CIMB SGD->MYR Rate Agent
 After=network.target
 
 [Service]

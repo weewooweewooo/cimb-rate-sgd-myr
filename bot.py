@@ -105,7 +105,7 @@ async def _send_update_result(
 
 # Build the settings embed used by the menu command.
 def _build_menu_embed(config: Dict[str, Any], snapshot: Dict[str, Any]) -> discord.Embed:
-    embed = discord.Embed(title="CIMB Rate Hunter \u2014 Your Settings")
+    embed = discord.Embed(title="CIMB Rate \u2014 Your Settings")
     fields = [
         ("Live rate", _format_live_rate(snapshot.get("rate")), True),
         ("Updated at", str(snapshot.get("timestamp", "N/A")), False),
