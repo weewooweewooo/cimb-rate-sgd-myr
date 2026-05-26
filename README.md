@@ -272,7 +272,13 @@ Deploy the agent to a GCP e2-micro VM (free tier) running 24/7:
    cd cimb-rate-sgd-myr
    ```
 
-7. Create virtual environment and install dependencies:
+7. Create a dedicated systemd service user (different from your SSH deploy user):
+   ```bash
+   sudo useradd --system --home /opt/cimb-rate-sgd-myr --shell /usr/sbin/nologin cimbagent
+   sudo chown -R cimbagent:cimbagent /opt/cimb-rate-sgd-myr
+   ```
+
+8. Create virtual environment and install dependencies:
    ```bash
    python3.11 -m venv .venv
    source .venv/bin/activate
@@ -280,7 +286,7 @@ Deploy the agent to a GCP e2-micro VM (free tier) running 24/7:
    playwright install chromium
    ```
 
-8. Create `.env` file with your bot token:
+9. Create `.env` file with your bot token:
    ```bash
    cat > .env << 'EOF'
    DISCORD_BOT_TOKEN=your_token_here
@@ -288,17 +294,17 @@ Deploy the agent to a GCP e2-micro VM (free tier) running 24/7:
    EOF
    ```
 
-9. Create initial user config(s) in `config/` directory (see Section 7)
+10. Create initial user config(s) in `config/` directory (see Section 7)
 
-10. Create systemd service file:
+11. Create systemd service file:
     ```bash
-    sudo cp cimb-agent.service /etc/systemd/system/
+    sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
     sudo systemctl daemon-reload
     sudo systemctl enable cimb-agent
     sudo systemctl start cimb-agent
     ```
 
-11. Verify it's running:
+12. Verify it's running:
     ```bash
     sudo systemctl status cimb-agent
     sudo journalctl -u cimb-agent -f
@@ -309,6 +315,10 @@ The agent will now run 24/7 and restart automatically on VM reboot or crash.
 ## CI/CD Pipeline Setup
 
 Deploy automatically from GitHub to your VM:
+
+**Important:** The `VM_USER` in GitHub Actions is the SSH deploy user (e.g., `ubuntu` or your GCP default user). The systemd service runs as a different, dedicated user (`cimbagent`). These are two separate accounts:
+- `VM_USER` — the SSH user that deploys code from GitHub Actions
+- `cimbagent` — the systemd service user that runs the agent (non-login account)
 
 1. Generate an SSH key pair on your local machine:
    ```bash
@@ -324,7 +334,7 @@ Deploy automatically from GitHub to your VM:
 
 4. Create these secrets:
    - `VM_HOST`: Your VM's external IP address
-   - `VM_USER`: `ubuntu`
+   - `VM_USER`: The SSH deploy user (e.g., `ubuntu` or your GCP username, **not** `cimbagent`)
    - `VM_SSH_KEY`: Paste the entire contents of `~/.ssh/vm_deploy_key` (private key)
 
 5. The `.github/workflows/deploy.yml` file is already configured in the repository
@@ -336,7 +346,18 @@ Deploy automatically from GitHub to your VM:
    - Restart the systemd service
    - Deploy complete in ~16 seconds
 
-View deployment logs in your GitHub repository under **Actions** tab.
+7. View deployment logs in your GitHub repository under **Actions** tab.
+
+## Security & Secrets
+
+**Never commit these to Git** (all are in `.gitignore`):
+- `.env` — Discord bot token and guild ID
+- `config/` directory — user Discord IDs
+- `config.yaml` or `state.json` — runtime state
+- SSH keys — never commit private keys
+- Discord webhook URLs or other secrets
+
+Always use GitHub Secrets for CI/CD credentials.
 
 ## Useful VM Commands
 
@@ -546,6 +567,24 @@ To see logs since the last restart:
 ```bash
 sudo journalctl -u cimb-agent --since today --no-pager -l
 ```
+
+### Service user vs SSH deploy user
+
+**Q:** Why does the systemd service use a different user (`cimbagent`) than the SSH deploy user?
+
+**A:** Security and privilege separation:
+- The SSH deploy user (e.g., `ubuntu`) needs sudo access to manage systemd
+- The service user (`cimbagent`) is a non-login system account with minimal privileges
+- This follows the principle of least privilege — the service only has access to what it needs
+- If the service is compromised, damage is limited to the `cimbagent` account and its files
+
+**Q:** How do I verify the service is running as `cimbagent`?
+
+**A:**
+```bash
+ps aux | grep agent.py
+```
+You should see the process owned by `cimbagent`, not your SSH user.
 
 ## What is Not Implemented
 

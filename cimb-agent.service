@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=zylee2279
+User=cimbagent
 WorkingDirectory=/opt/cimb-rate-sgd-myr
 EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
 Environment=PYTHONUNBUFFERED=1

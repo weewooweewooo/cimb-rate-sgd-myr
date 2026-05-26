@@ -3,11 +3,11 @@
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #
 #   VM_HOST     — GCP VM external IP (e.g., 35.184.135.76)
-#   VM_USER     — VM username (zylee2279)
+#   VM_USER     — VM username (e.g., ubuntu or your GCP default user)
 #   VM_SSH_KEY  — Private SSH key for VM access
 #
 # To get your private SSH key from the VM:
-#   1. SSH into the VM: ssh -i <your-key> zylee2279@<VM_IP>
+#   1. SSH into the VM: ssh -i <your-key> <VM_USER>@<VM_IP>
 #   2. Run: cat ~/.ssh/google_compute_engine
 #   3. Copy the full content (including "-----BEGIN RSA PRIVATE KEY-----" and end line)
 #   4. Go to GitHub Settings → Secrets and variables → Actions

@@ -28,7 +28,7 @@ To enable automated deployments, you must configure three GitHub Secrets in your
 
 1. SSH into the GCP VM:
    ```bash
-   ssh -i <your-local-key> zylee2279@<VM_EXTERNAL_IP>
+   ssh -i <your-local-key> <VM_USER>@<VM_EXTERNAL_IP>
    ```
 
 2. Display the private SSH key:
@@ -51,7 +51,7 @@ To enable automated deployments, you must configure three GitHub Secrets in your
    | Secret Name | Value |
    |-------------|-------|
    | `VM_HOST` | External IP of your GCP VM (e.g., `35.184.135.76`) |
-   | `VM_USER` | VM username (`zylee2279`) |
+   | `VM_USER` | VM username (e.g., `ubuntu` or your GCP default user) |
    | `VM_SSH_KEY` | Full content of `~/.ssh/google_compute_engine` from the VM |
 
 ### Step 3: Verify the Setup
@@ -75,7 +75,7 @@ If the GitHub Actions pipeline fails or you need to deploy manually:
 ### SSH into the VM
 
 ```bash
-ssh -i <your-local-key> zylee2279@<VM_EXTERNAL_IP>
+ssh -i <your-local-key> <VM_USER>@<VM_EXTERNAL_IP>
 ```
 
 ### Run the Deployment Commands
@@ -107,7 +107,7 @@ To view real-time logs from the `cimb-agent` service:
 
 ```bash
 # SSH into the VM
-ssh -i <your-local-key> zylee2279@<VM_EXTERNAL_IP>
+ssh -i <your-local-key> <VM_USER>@<VM_EXTERNAL_IP>
 
 # Follow logs (Ctrl+C to exit)
 sudo journalctl -u cimb-agent -f
@@ -127,7 +127,7 @@ To check if the service is currently running:
 
 ```bash
 # SSH into the VM
-ssh -i <your-local-key> zylee2279@<VM_EXTERNAL_IP>
+ssh -i <your-local-key> <VM_USER>@<VM_EXTERNAL_IP>
 
 # View service status
 sudo systemctl status cimb-agent
@@ -165,7 +165,7 @@ Expected output when running:
 ### SSH authentication fails
 
 1. Verify `VM_SSH_KEY` secret contains the full private key (including BEGIN/END lines)
-2. Verify `VM_USER` is set to `zylee2279`
+3. Verify `VM_USER` secret is set correctly (to your SSH user)
 3. Verify `VM_HOST` is the external IP of your GCP VM
 4. Test SSH access manually from your local machine
 
