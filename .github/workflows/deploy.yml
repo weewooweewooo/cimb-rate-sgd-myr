@@ -41,24 +41,24 @@ jobs:
           script_stop: true
           # Execute deployment script
           script: |
-            # Navigate to project directory
             cd /opt/cimb-rate-sgd-myr
             
-            # Pull latest code from main branch
-            echo "Pulling latest code from main..."
-            git pull origin main
+            echo "Resetting repo to origin/main..."
+            git fetch origin main
+            git reset --hard origin/main
             
-            # Activate virtual environment and install dependencies
-            echo "Activating virtual environment and installing dependencies..."
+            echo "Installing dependencies..."
             source .venv/bin/activate
             pip install -r requirements.txt --quiet
             
-            # Restart the systemd service
-            echo "Restarting cimb-agent service..."
+            echo "Installing systemd service..."
+            sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
+            sudo systemctl daemon-reload
+            
+            echo "Restarting cimb-agent..."
             sudo systemctl restart cimb-agent
             
-            # Check service status
             echo "Checking service status..."
-            sudo systemctl status cimb-agent --no-pager
+            sudo systemctl status cimb-agent --no-pager -l
             
             echo "Deployment completed successfully!"

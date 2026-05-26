@@ -4,11 +4,13 @@ After=network.target
 
 [Service]
 Type=simple
+User=zylee2279
 WorkingDirectory=/opt/cimb-rate-sgd-myr
-ExecStart=/usr/bin/python3 /opt/cimb-rate-sgd-myr/agent.py
+EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/cimb-rate-sgd-myr/.venv/bin/python /opt/cimb-rate-sgd-myr/agent.py
 Restart=always
 RestartSec=3
-EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
 
 [Install]
 WantedBy=multi-user.target

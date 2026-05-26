@@ -443,6 +443,110 @@ Then restart: `sudo systemctl restart cimb-agent`
 3. Validate JSON: `python3 -m json.tool config/username.json`
 4. Delete/fix the corrupted file and restart: `sudo systemctl restart cimb-agent`
 
+## Systemd Deployment Troubleshooting
+
+### ModuleNotFoundError: No module named 'dotenv'
+
+**Symptom:** After deploying to VM, systemd starts the service but fails with:
+```
+ModuleNotFoundError: No module named 'dotenv'
+```
+
+**Cause:** The systemd service is running with the wrong Python — likely `/usr/bin/python3` instead of the virtual environment's Python at `/opt/cimb-rate-sgd-myr/.venv/bin/python`
+
+**Diagnosis:**
+1. Check which Python is being used:
+   ```bash
+   ps aux | grep agent.py
+   ```
+   If you see `/usr/bin/python3`, this is the problem.
+
+2. View full service logs:
+   ```bash
+   sudo journalctl -u cimb-agent -n 100 --no-pager -l
+   ```
+
+**Fix:**
+1. Verify the service file uses the venv Python:
+   ```bash
+   cat /etc/systemd/system/cimb-agent.service | grep ExecStart
+   ```
+   It must be:
+   ```
+   ExecStart=/opt/cimb-rate-sgd-myr/.venv/bin/python /opt/cimb-rate-sgd-myr/agent.py
+   ```
+
+2. If it's wrong, update the service file:
+   ```bash
+   sudo cp /opt/cimb-rate-sgd-myr/cimb-agent.service /etc/systemd/system/cimb-agent.service
+   ```
+
+3. Reload systemd and restart the service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart cimb-agent
+   ```
+
+4. Verify it's now using the correct Python:
+   ```bash
+   ps aux | grep agent.py
+   ```
+   Should show: `/opt/cimb-rate-sgd-myr/.venv/bin/python`
+
+5. Check service status:
+   ```bash
+   sudo systemctl status cimb-agent --no-pager -l
+   ```
+   Should show: `active (running)`
+
+### Git deployment fails: tracked file blocked pull
+
+**Symptom:** GitHub Actions deployment fails with:
+```
+error: Your local changes to the following files would be overwritten by merge:
+  cimb-agent.service
+Please commit your changes or stash them before you merge.
+```
+
+**Cause:** Manual edits to `cimb-agent.service` on the VM created a local modification that blocks `git pull`
+
+**Fix:**
+The GitHub Actions workflow now automatically handles this with a hard reset:
+```bash
+git fetch origin main
+git reset --hard origin/main
+```
+
+This safely discards any local modifications and restores the VM's tracked files to the latest version from GitHub.
+
+If you need to force-fix this manually:
+```bash
+cd /opt/cimb-rate-sgd-myr
+git fetch origin main
+git reset --hard origin/main
+sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
+sudo systemctl daemon-reload
+sudo systemctl restart cimb-agent
+sudo systemctl status cimb-agent --no-pager -l
+```
+
+### Viewing service logs
+
+To see what the agent is doing in real-time:
+```bash
+sudo journalctl -u cimb-agent -f
+```
+
+To see the last 100 lines of logs:
+```bash
+sudo journalctl -u cimb-agent -n 100 --no-pager -l
+```
+
+To see logs since the last restart:
+```bash
+sudo journalctl -u cimb-agent --since today --no-pager -l
+```
+
 ## What is Not Implemented
 
 The following features are deliberately not implemented:
