@@ -1,54 +1,53 @@
 # cimb-rate-sgd-myr
 
-A personal Python background agent that monitors the live CIMB SGD→MYR public exchange rate via Playwright scraping and sends Discord DM alerts when the rate crosses a user-defined target. Designed for Malaysians in Singapore who transfer SGD→MYR via CIMB.
+A Python Discord bot agent that monitors the live CIMB SGD→MYR exchange rate and sends Discord DM alerts when the rate reaches a user-defined target. Built for Malaysians in Singapore transferring SGD→MYR.
+
+**For your own deployment:** Fork this repo instead of cloning to have your own independent copy.
 
 ## Features
 
-- **Live rate scraping every 3 seconds** — detects rate changes in near real-time
-- **Page reload every 60 seconds** — forces fresh data from CIMB server
-- **Discord DM alerts** — instant notification when rate crosses your target
-- **Peak tracking** — alert fires when rate ≥ target AND rate > peak_rate; resets when rate drops below target
-- **Active window** — set which hours per day (HH:MM) to monitor
-- **Active days** — set which days of the week (mon-sun) to monitor
-- **Per-user config files** — each user has their own JSON settings (no database)
-- **Slash commands** — `/register`, `/status`, `/settarget`, `/setwindow`, `/setdays`, `/toggle`, `/menu`
-- **Phone-friendly button UI** — `/menu` opens button panels and modals for easy mobile configuration
-- **Self-service registration** — users register themselves via `/register`
-- **Hot config reload** — config changes detected and applied within 1 second
-- **24/7 hosting on GCP free tier** — runs on e2-micro Ubuntu VM with systemd auto-restart
-- **GitHub Actions CI/CD** — push to main branch, auto-deploys to VM in ~16 seconds
-- **No database required** — config stored as JSON files per user
-- **No banking integration** — only reads public rate page, no login or credentials
+- **Live rate scraping** — polls the CIMB rate page every 3 seconds (configurable)
+- **Automatic page reload** — refreshes page every 5 minutes to get fresh data
+- **Discord DM alerts** — sends notifications when rate crosses your target
+- **Peak-based triggering** — alert fires when current rate > peak_rate AND rate ≥ target; peak resets when rate drops below target
+- **Active time windows** — set which hours (HH:MM format) alerts should trigger
+- **Active days control** — select which days of the week (mon-sun) to monitor
+- **Per-user JSON configs** — each user has their own config file in `config/` (no database)
+- **7 slash commands** — `/register`, `/status`, `/settarget`, `/setwindow`, `/setdays`, `/toggle`, `/menu`
+- **Interactive menu** — `/menu` opens button-based UI for changing settings on mobile
+- **Self-service registration** — users run `/register Your Name` to create their account
+- **Hot config reload** — detects config file changes within 1 second without restarting
+- **Minimal Discord intents** — only uses the necessary permissions
+- **Atomic file writes** — config updates are all-or-nothing; no data corruption on crash
+- **GitHub Actions CI/CD** — push to main branch auto-deploys to VM in ~16 seconds
+- **Systemd service** — runs 24/7 with automatic restart on crash or reboot
 
 ## Requirements
 
-- **Python 3.11** (not 3.12 — Playwright incompatible with 3.12)
+- **Python 3.11+** — confirmed in agent.py
 - **Git** — to clone the repository
-- **A Discord bot token** — create via Discord Developer Portal (see Section 5)
-- **A private Discord server** — bot must be in the same server as users to send DMs
-- **GCP account** (optional) — for 24/7 hosting; free tier includes e2-micro VM (1GB swap required)
+- **A Discord bot token** — create via Discord Developer Portal
+- **Playwright & Chromium** — for browser automation to scrape the rate page
+- **aiofiles** — for async file operations (see requirements.txt)
 
 ## File Structure
 
 ```
 cimb-rate-sgd-myr/
-├── agent.py              Main scraper loop, page reload, alert logic
-├── bot.py                Discord slash commands, modals, button views
-├── notifier.py           Discord DM embed sender
-├── config_loader.py      Atomic JSON read/write, file watcher for hot reload
-├── config/               Per-user JSON config files (gitignored)
-├── .env                  Bot token and settings (gitignored)
-├── .env.example          Template for .env variables
-├── .gitignore            Prevents secrets from being committed
-├── requirements.txt      Python dependencies
-├── setup.sh              Installation script
-├── cimb-agent.service    Systemd service unit file
+├── agent.py                 Main scraper loop, page reload, peak tracking, alert logic
+├── bot.py                   Discord bot, slash commands, interactive UI views
+├── notifier.py              Discord DM embed builder and sender
+├── config_loader.py         Atomic JSON read/write, file watcher for hot reload
+├── config/                  Per-user JSON config files (gitignored)
+├── .env.example             Template for environment variables
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml    GitHub Actions CI/CD pipeline
+│       └── deploy.yml       GitHub Actions CI/CD pipeline
 ├── docs/
-│   └── deployment.md     Detailed deployment reference
-└── README.md             This file
+│   └── deployment.md        Deployment guide and troubleshooting
+├── requirements.txt         Python dependencies
+├── cimb-agent.service       Systemd service unit file
+└── README.md                This file
 ```
 
 ## Discord Bot Setup
@@ -72,292 +71,304 @@ Create your Discord bot token and add it to your server:
 - Right-click your username anywhere and select **Copy User ID**
 - Save this for your user config file (see Section 7)
 
-## Local Setup — Windows
+## Quick Start — Local Setup
 
-Run the agent on your Windows machine:
+### 1. Clone and Setup Environment
 
-1. Clone the repository:
-   ```powershell
-   git clone https://github.com/weewooweewooo/cimb-rate-sgd-myr.git
-   cd cimb-rate-sgd-myr
-   ```
+```bash
+git clone https://github.com/yourusername/cimb-rate-sgd-myr.git
+cd cimb-rate-sgd-myr
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
 
-2. Create a virtual environment with Python 3.11:
-   ```powershell
-   py -3.11 -m venv .venv
-   .venv\Scripts\activate
-   ```
-   *(Use Python 3.11 only — Playwright doesn't support 3.12)*
+### 2. Install Dependencies
 
-3. Copy the environment template and fill in your bot token:
-   ```powershell
-   copy .env.example .env
-   # Edit .env in notepad and add your DISCORD_BOT_TOKEN
-   ```
+```bash
+pip install -r requirements.txt
+playwright install chromium
+```
 
-4. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   playwright install chromium
-   ```
+### 3. Configure Environment
 
-5. Create your user config file manually (see Section 7 for template)
+```bash
+cp .env.example .env
+# Edit .env and add your DISCORD_BOT_TOKEN
+```
 
-6. Run the agent:
-   ```powershell
-   python agent.py
-   ```
+### 4. Create Your User Config
 
-7. In your Discord server, use `/register Your Name` to create your account, or manually edit your config file
+Create a JSON file in `config/user_{YOUR_DISCORD_ID}.json`:
+
+```json
+{
+  "name": "Your Name",
+  "discord_user_id": "YOUR_DISCORD_ID_HERE",
+  "target_rate": 3.1000,
+  "active_start": "09:00",
+  "active_end": "19:00",
+  "active_days": ["mon", "tue", "wed", "thu", "fri"],
+  "enabled": true,
+  "last_alerted_at": null,
+  "peak_rate": 0.0
+}
+```
+
+**To find your Discord User ID:**
+- Enable Developer Mode in Discord (Settings → Advanced → Developer Mode)
+- Right-click your username and select "Copy User ID"
+
+### 5. Run the Agent
+
+```bash
+python agent.py
+```
+
+The agent will start scraping the CIMB rate page every 3 seconds and reload the page every 5 minutes.
+
+### 6. Register via Discord (Optional)
+
+Alternatively, send a DM to your bot with `/register Your Name` to auto-create your config.
+
+Then use `/status` to see the live rate and `/menu` to configure settings.
 
 ## User Config File
 
-Each user has a JSON file in the `config/` directory. You can create one manually or use `/register`.
+Each user has a JSON file in the `config/` directory named `user_{discord_user_id}.json`. Create one manually or via `/register` command.
 
-**Example config file: `config/sean.json`**
+**Example: `config/user_123456789012345678.json`**
 
 ```json
 {
   "name": "Sean",
   "discord_user_id": "123456789012345678",
-  "target_rate": 3.1050,
+  "target_rate": 3.1000,
   "active_start": "09:00",
   "active_end": "19:00",
   "active_days": ["mon", "tue", "wed", "thu", "fri"],
   "enabled": true,
-  "last_alerted_at": "2024-05-20T14:32:15.123456+00:00",
+  "last_alerted_at": null,
   "peak_rate": 0.0
 }
 ```
 
-**User Config Fields:**
+**Config Field Descriptions:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Display name for the user |
-| `discord_user_id` | string | Discord numeric ID (required for DM alerts) |
-| `target_rate` | float | SGD→MYR rate that triggers alerts (e.g., 3.1050) |
-| `active_start` | string | Start hour in HH:MM format (24-hour) |
-| `active_end` | string | End hour in HH:MM format (24-hour) |
+| `name` | string | User's display name |
+| `discord_user_id` | string | Discord numeric user ID (required for DMs) |
+| `target_rate` | float | SGD→MYR rate threshold for alerts (e.g., 3.1000) |
+| `active_start` | string | Alert start time in HH:MM format (24-hour, e.g., 09:00) |
+| `active_end` | string | Alert end time in HH:MM format (24-hour, e.g., 19:00) |
 | `active_days` | array | Days to monitor: `["mon", "tue", "wed", "thu", "fri", "sat", "sun"]` |
 | `enabled` | boolean | `true` to enable alerts, `false` to disable |
-| `last_alerted_at` | string | ISO 8601 timestamp of last alert (auto-updated) |
-| `peak_rate` | float | Tracks peak rate since target was crossed; resets when rate drops below target |
+| `last_alerted_at` | string \| null | ISO 8601 timestamp of most recent alert |
+| `peak_rate` | float | Tracks highest rate since target was crossed; resets when rate < target |
+
+**Peak Rate Logic:**
+- When `rate >= target_rate`, the bot tracks the peak
+- Alert only fires if `rate > peak_rate` AND the current time is within active window + active days
+- When `rate < target_rate`, peak_rate resets to 0
 
 ## Environment Variables
 
-Create a `.env` file in the project root with these variables:
+Create a `.env` file in the project root. See `.env.example` for a template.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DISCORD_BOT_TOKEN` | Yes | — | Bot token from Discord Developer Portal |
-| `DISCORD_GUILD_ID` | No | — | Your Discord server ID (optional; enables instant command sync) |
-| `CIMB_RATE_URL` | No | `https://www.cimbclicks.com.sg/sgd-to-myr` | CIMB rate page URL |
-| `SCRAPE_INTERVAL_MS` | No | `3000` | Milliseconds between rate reads (3 seconds) |
-| `PAGE_RELOAD_INTERVAL_MS` | No | `60000` | Milliseconds between page reloads (60 seconds) |
-| `IDLE_SLEEP_MS` | No | `60000` | Milliseconds to sleep when no user is active |
-| `MAX_NULL_STREAK` | No | `5` | Consecutive null reads before force-reload |
-| `TIMEZONE` | No | `Asia/Singapore` | Timezone for active window checks |
-| `CONFIG_DIR` | No | `config` | Directory containing user JSON files |
+| `DISCORD_GUILD_ID` | No | — | Discord server ID for instant command sync |
+| `SCRAPE_INTERVAL_MS` | No | 3000 | Milliseconds between rate reads |
+| `IDLE_SLEEP_MS` | No | 60000 | Milliseconds to sleep when all users are outside active window |
+| `MAX_NULL_STREAK` | No | 5 | Consecutive null reads before forcing page reload |
+| `PAGE_RELOAD_INTERVAL_MS` | No | 300000 | Milliseconds between full page reloads (5 minutes) |
+| `TIMEZONE` | No | Asia/Singapore | Timezone for active window checks |
+| `CIMB_RATE_URL` | No | https://www.cimbclicks.com.sg/sgd-to-myr | CIMB rate page URL |
+| `PLAYWRIGHT_USER_DATA_DIR` | No | .playwright | Playwright cache directory |
+| `CONFIG_DIR` | No | config | Directory containing user JSON config files |
 
 **Example `.env` file:**
 
 ```
 DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_GUILD_ID=your_server_id_here
+DISCORD_GUILD_ID=your_server_id
 SCRAPE_INTERVAL_MS=3000
-PAGE_RELOAD_INTERVAL_MS=60000
 IDLE_SLEEP_MS=60000
+MAX_NULL_STREAK=5
+PAGE_RELOAD_INTERVAL_MS=300000
 TIMEZONE=Asia/Singapore
+CIMB_RATE_URL=https://www.cimbclicks.com.sg/sgd-to-myr
+CONFIG_DIR=config
 ```
 
 ## Slash Commands
 
-All commands are available as slash commands in Discord (type `/` in any DM or channel):
+All commands are Discord slash commands (type `/` in any DM to the bot):
 
 | Command | Arguments | Description |
 |---------|-----------|-------------|
-| `/register` | `name: str` | Register yourself as a new user; creates your config file |
-| `/status` | — | Show live rate, target, active window, enabled status, and all settings |
-| `/menu` | — | Open button panel with options to change settings via buttons and modals |
+| `/register` | `name: str` | Register as a new user; creates your config file with default settings |
+| `/status` | — | Display live rate, your target, active window, and all current settings |
 | `/settarget` | `rate: float` | Set your target SGD→MYR rate (e.g., 3.1050) |
-| `/setwindow` | `start: str` `end: str` | Set active hours in HH:MM format (e.g., 09:00 19:00) |
-| `/setdays` | `days: str` | Set active days (e.g., "mon tue wed thu fri") |
+| `/setwindow` | `start: str` `end: str` | Set active alert window (HH:MM format, e.g., 09:00 19:00) |
+| `/setdays` | `days: str` | Set active days (space or comma-separated, e.g., "mon tue wed thu fri") |
 | `/toggle` | `mode: on \| off` | Enable or disable alerts |
+| `/menu` | — | Open interactive settings panel with buttons for all config options |
 
-**Note:** All commands work in DMs and require you to be registered (use `/register` first).
+**Command Restrictions:**
+- All commands work in direct messages (DMs) to the bot
+- `/menu` command opens ephemeral (visible only to you) button interface
+- All commands require user to be registered first (use `/register` if not registered)
 
-## /menu Button Interface
+## /menu Interactive Interface
 
-The `/menu` command opens a phone-friendly settings panel with buttons:
+The `/menu` command opens a phone-friendly settings panel (ephemeral — visible only to you):
 
-- **Set Target Rate** → Opens modal to input your target rate
-- **Set Window** → Opens modal to input start and end hours (HH:MM format)
-- **Toggle On/Off** → Button choices to enable or disable alerts
-- **Set Days** → Interactive button panel with 7 day toggle buttons (✅ active, ❌ inactive); tap to toggle, then Save
+- **Set Target Rate** — Opens modal to enter your target SGD→MYR rate
+- **Set Window** — Opens modal to enter start and end times (HH:MM format)
+- **Toggle On/Off** — Button choices to enable or disable alerts
+- **Set Days** — Interactive button panel with all 7 days; tap to toggle (✅ or ❌), then Save
 
-All `/menu` interactions are ephemeral (only visible to you).
+All interactions are ephemeral and only visible to you.
 
 ## Adding a New User
 
-### Method 1: Self-service via Discord (Easiest)
+### Method 1: Self-Registration (Easiest)
 
-1. Have the user join your Discord server
-2. User runs `/register Your Full Name` in any DM to the bot
-3. User uses `/menu` to configure their settings
+1. User sends DM to the bot: `/register Your Full Name`
+2. Bot creates config file automatically with defaults
+3. User runs `/menu` to customize settings
 4. Done — user is registered and alerts are enabled
 
-### Method 2: Manual config file creation
+### Method 2: Manual Config Creation
 
-1. SSH into your VM (or edit locally before deploying):
-   ```bash
-   gcloud compute ssh cimb-rate-vm --zone=us-central1-a --project=your-project-id
-   cd cimb-rate-sgd-myr
-   ```
+1. Create a new JSON file in `config/user_{DISCORD_ID}.json`:
 
-2. Create a new JSON file in the `config/` directory:
-   ```bash
-   cat > config/newuser.json << 'EOF'
-   {
-     "name": "New User",
-     "discord_user_id": "987654321098765432",
-     "target_rate": 3.1200,
-     "active_start": "09:00",
-     "active_end": "17:00",
-     "active_days": ["mon", "tue", "wed", "thu", "fri"],
-     "enabled": true,
-     "last_alerted_at": null,
-     "peak_rate": 0.0
-   }
-   EOF
-   ```
+```json
+{
+  "name": "New User",
+  "discord_user_id": "987654321098765432",
+  "target_rate": 3.1200,
+  "active_start": "09:00",
+  "active_end": "17:00",
+  "active_days": ["mon", "tue", "wed", "thu", "fri"],
+  "enabled": true,
+  "last_alerted_at": null,
+  "peak_rate": 0.0
+}
+```
 
-3. The agent detects the new file within 1 second and activates it automatically (no restart needed)
+2. The config watcher detects the new file within 1 second
+3. No restart needed — agent activates immediately
 
-## GCP VM Deployment
+## Deployment to Server
 
-Deploy the agent to a GCP e2-micro VM (free tier) running 24/7:
+### Systemd Service Setup
 
-1. Create a GCP project and enable Compute Engine API
+The `cimb-agent.service` file configures the agent to run as a systemd service:
 
-2. Create an e2-micro VM:
-   - Zone: `us-central1-a`
-   - OS Image: Ubuntu 22.04 LTS
-   - Boot disk: 10GB
-   - Create and note the SSH key
+```ini
+[Service]
+Type=simple
+User=cimbagent
+WorkingDirectory=/opt/cimb-rate-sgd-myr
+EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/cimb-rate-sgd-myr/.venv/bin/python /opt/cimb-rate-sgd-myr/agent.py
+Restart=always
+RestartSec=3
+```
 
-3. SSH into your VM:
-   ```bash
-   gcloud compute ssh cimb-rate-vm --zone=us-central1-a --project=your-project-id
-   ```
+**Key points:**
+- Runs as non-privileged user `cimbagent`
+- Automatically restarts on crash (after 3 seconds)
+- Reads environment from `.env` file
+- Keeps Python output unbuffered for live logs
+- Uses the virtual environment Python executable
 
-4. Create 1GB swapfile (required for Chromium to run without EPIPE crashes):
-   ```bash
-   sudo fallocate -l 1G /swapfile
-   sudo chmod 600 /swapfile
-   sudo mkswap /swapfile
-   sudo swapon /swapfile
-   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-   ```
+### Service Management
 
-5. Update system and install Python 3.11:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install -y python3.11 python3.11-venv git
-   ```
+```bash
+# Check status
+sudo systemctl status cimb-agent
 
-6. Clone the repository:
-   ```bash
-   git clone https://github.com/weewooweewooo/cimb-rate-sgd-myr.git
-   cd cimb-rate-sgd-myr
-   ```
+# Start/stop/restart
+sudo systemctl start cimb-agent
+sudo systemctl stop cimb-agent
+sudo systemctl restart cimb-agent
 
-7. Create a dedicated systemd service user (different from your SSH deploy user):
-   ```bash
-   sudo useradd --system --home /opt/cimb-rate-sgd-myr --shell /usr/sbin/nologin cimbagent
-   sudo chown -R cimbagent:cimbagent /opt/cimb-rate-sgd-myr
-   ```
+# Enable auto-start on reboot
+sudo systemctl enable cimb-agent
 
-8. Create virtual environment and install dependencies:
-   ```bash
-   python3.11 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   playwright install chromium
-   ```
+# View live logs
+sudo journalctl -u cimb-agent -f
 
-9. Create `.env` file with your bot token:
-   ```bash
-   cat > .env << 'EOF'
-   DISCORD_BOT_TOKEN=your_token_here
-   DISCORD_GUILD_ID=your_server_id
-   EOF
-   ```
+# View recent logs
+sudo journalctl -u cimb-agent -n 50
+```
 
-10. Create initial user config(s) in `config/` directory (see Section 7)
+**For complete deployment guide, see [docs/deployment.md](docs/deployment.md).**
 
-11. Create systemd service file:
-    ```bash
-    sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
-    sudo systemctl daemon-reload
-    sudo systemctl enable cimb-agent
-    sudo systemctl start cimb-agent
-    ```
+## GitHub Actions CI/CD Pipeline
 
-12. Verify it's running:
-    ```bash
-    sudo systemctl status cimb-agent
-    sudo journalctl -u cimb-agent -f
-    ```
+Automatic deployment to your VM whenever you push to the `main` branch.
 
-The agent will now run 24/7 and restart automatically on VM reboot or crash.
+### Deployment Flow (defined in `.github/workflows/deploy.yml`)
 
-## CI/CD Pipeline Setup
+1. **Trigger:** Push to `main` branch
+2. **Checkout:** Latest code is pulled
+3. **SSH to VM** with configured credentials
+4. **Reset repo** to origin/main (hard reset for clean deployment)
+5. **Install dependencies:** `pip install -r requirements.txt`
+6. **Copy systemd service:** `sudo cp cimb-agent.service /etc/systemd/system/`
+7. **Reload systemd:** `sudo systemctl daemon-reload`
+8. **Restart service:** `sudo systemctl restart cimb-agent`
+9. **Verify status:** Check service is running
+10. **Complete:** Deployment finished (~16 seconds total)
 
-Deploy automatically from GitHub to your VM:
+### Setup GitHub Secrets
 
-**Important:** The `VM_USER` in GitHub Actions is the SSH deploy user (e.g., `ubuntu` or your GCP default user). The systemd service runs as a different, dedicated user (`cimbagent`). These are two separate accounts:
-- `VM_USER` — the SSH user that deploys code from GitHub Actions
-- `cimbagent` — the systemd service user that runs the agent (non-login account)
+Go to your GitHub repository **Settings** → **Secrets and variables** → **Actions** and add:
 
-1. Generate an SSH key pair on your local machine:
-   ```bash
-   ssh-keygen -t rsa -b 4096 -f ~/.ssh/vm_deploy_key -N ""
-   ```
+| Secret | Value |
+|--------|-------|
+| `VM_HOST` | External IP of your deployment VM (e.g., `35.184.135.76`) |
+| `VM_USER` | SSH username on the VM (e.g., `ubuntu`) |
+| `VM_SSH_KEY` | Full private SSH key for authentication (include BEGIN/END lines) |
 
-2. Add the public key to your VM:
-   ```bash
-   gcloud compute ssh cimb-rate-vm --zone=us-central1-a --command="echo '$(cat ~/.ssh/vm_deploy_key.pub)' >> ~/.ssh/authorized_keys"
-   ```
+### Manual Deployment (if needed)
 
-3. Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions**
+SSH into your VM and run:
 
-4. Create these secrets:
-   - `VM_HOST`: Your VM's external IP address
-   - `VM_USER`: The SSH deploy user (e.g., `ubuntu` or your GCP username, **not** `cimbagent`)
-   - `VM_SSH_KEY`: Paste the entire contents of `~/.ssh/vm_deploy_key` (private key)
-
-5. The `.github/workflows/deploy.yml` file is already configured in the repository
-
-6. On every push to `main`, GitHub Actions will:
-   - SSH into your VM
-   - Pull the latest code
-   - Install dependencies
-   - Restart the systemd service
-   - Deploy complete in ~16 seconds
-
-7. View deployment logs in your GitHub repository under **Actions** tab.
+```bash
+cd /opt/cimb-rate-sgd-myr
+git fetch origin main
+git reset --hard origin/main
+source .venv/bin/activate
+pip install -r requirements.txt --quiet
+sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
+sudo systemctl daemon-reload
+sudo systemctl restart cimb-agent
+sudo systemctl status cimb-agent --no-pager -l
+```
 
 ## Security & Secrets
 
-**Never commit these to Git** (all are in `.gitignore`):
-- `.env` — Discord bot token and guild ID
-- `config/` directory — user Discord IDs
-- `config.yaml` or `state.json` — runtime state
+**Never commit these to Git** (protected by `.gitignore`):
+- `.env` — Discord bot token
+- `config/` — user config files with Discord IDs
 - SSH keys — never commit private keys
-- Discord webhook URLs or other secrets
 
-Always use GitHub Secrets for CI/CD credentials.
+**Always use GitHub Secrets for CI/CD credentials:**
+- `VM_HOST` — VM IP address
+- `VM_USER` — SSH username
+- `VM_SSH_KEY` — Private SSH key
+
+**Config files are atomic:**
+- All writes go through temp file then atomic rename
+- No data loss or corruption on crash
+- File watcher detects changes within 1 second
 
 ## Useful VM Commands
 
@@ -376,236 +387,73 @@ Commands for managing the agent on your GCP VM:
 | `df -h` | Check disk usage |
 | `sudo systemctl reload-or-restart cimb-agent` | Reload config (no downtime) |
 
-## Troubleshooting
+## Code Architecture
 
-### EPIPE crash on VM startup
+### agent.py — Main Scraper Loop
 
-**Symptom:** Agent crashes immediately with "BrokenPipeError: [Errno 32] Broken pipe"
+**Key functions:**
 
-**Cause:** e2-micro has only 1GB RAM. Chromium needs swap space.
+- `load_settings()` — Reads environment variables into typed Settings
+- `fetch_live_rate(page)` — Evaluates JavaScript on CIMB page to extract current rate
+- `parse_rate_value(raw)` — Converts raw value to float
+- `is_within_active_window()` — Checks if current time is in active window
+- `is_active_day()` — Checks if today is in active_days list
+- `any_user_active()` — Checks if at least one user should be monitored now
+- `process_user_alert()` — Applies peak tracking logic and sends alerts
+- `poll_forever()` — Main infinite loop that continuously scrapes and checks alerts
 
-**Fix:**
-```bash
-sudo fallocate -l 1G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
+**Peak Tracking Logic:**
+
+```python
+if rate < target:
+    if peak_rate > 0:
+        reset peak_rate to 0.0
+elif rate > peak_rate and is_active_now():
+    send alert and update peak_rate
 ```
 
-Then restart: `sudo systemctl restart cimb-agent`
+### bot.py — Discord Commands
 
-### Agent shows rate=None for 60+ seconds on VM startup
+**Key classes:**
 
-**Symptom:** First read returns `rate=None` and takes 60 seconds to resolve
+- `RateHunterBot(commands.Bot)` — Main Discord bot with minimal intents
+- `RateCommands(commands.Cog)` — Slash command handler
+- `MenuView(discord.ui.View)` — Interactive settings menu buttons
+- `SetTargetModal`, `SetWindowModal` — Input dialogs
+- `ToggleView`, `DaySelectView` — Button-based UI controls
 
-**Cause:** `wait_for_function()` on e2-micro can take 60 seconds on first load due to low CPU/memory
+**Slash commands implemented:**
+- `/register`, `/status`, `/settarget`, `/setwindow`, `/setdays`, `/toggle`, `/menu`
 
-**Workaround:** This is normal on first startup. Subsequent scrapes are much faster (3-5 seconds). Be patient.
+### config_loader.py — Config Management
 
-### Slash commands not appearing in Discord
+**Key functions:**
 
-**Symptom:** `/register`, `/menu`, etc. don't show up in Discord
+- `start()` — Load configs and start file watcher
+- `get_all_users()` — Return all user configs (thread-safe copies)
+- `get_user_by_discord_id()` — Lookup one user's config
+- `update_user_fields()` — Atomically update config fields
+- `create_user()` — Create new user config file
+- `_watch_loop()` — Poll for file changes every 1 second
+- `_write_json_atomic()` — Write through temp file for atomicity
 
-**Cause:** Bot token is invalid or bot is not in your server
+### notifier.py — DM Alerts
 
-**Fix:**
-1. Verify `DISCORD_BOT_TOKEN` is correct in `.env`
-2. Verify bot is in your Discord server (check Members list)
-3. Restart agent: `sudo systemctl restart cimb-agent`
-4. Wait 30 seconds and try again
+**Key function:**
 
-**Optional:** Add `DISCORD_GUILD_ID` to `.env` with your server's numeric ID for instant command sync (otherwise takes up to 1 hour).
+- `send_rate_alert(payload)` — Resolve Discord user and send embed DM
 
-### Bot cannot send DMs to user
+## What is NOT Implemented
 
-**Symptom:** Agent finds a matching rate but user doesn't receive alert DM
+- **Rate history** — only live monitoring, no data storage
+- **Rate prediction** — no ML or forecasting
+- **Multiple rate sources** — only CIMB's public page
+- **Web dashboard** — Discord-only interface
+- **Actual fund transfers** — monitoring only, no banking integration
+- **Direct API access** — only reads from public webpage
+- **Webhook notifications** — Discord DMs only
+- **Alternative messaging** — Telegram/Email/SMS not supported
 
-**Cause:** Bot is not in a server shared with the user, or user has DMs disabled
+## Documentation
 
-**Fix:**
-1. Verify bot is in the same Discord server as the user
-2. Have the user check **Settings** → **Privacy & Safety** → allow DMs from server members
-3. Verify user's `discord_user_id` in their config file matches their actual Discord ID
-
-### Playwright/Chromium errors on startup
-
-**Symptom:** `ModuleNotFoundError: No module named 'playwright'` or Chromium won't launch
-
-**Cause:** Playwright not installed or wrong Python version (3.12 instead of 3.11)
-
-**Fix:**
-1. Verify Python version: `python3 --version` (must be 3.11.x, not 3.12)
-2. Reinstall Playwright:
-   ```bash
-   pip install --upgrade playwright
-   playwright install chromium
-   ```
-
-### Rate value is stuck or stale
-
-**Symptom:** Rate value doesn't update for more than 5 minutes
-
-**Cause:** Page reload may be delayed or JavaScript on CIMB's site is not updating
-
-**Workaround:**
-- First page reload happens `PAGE_RELOAD_INTERVAL_MS` (default 60s) after startup, then every 60s after that
-- Check logs: `sudo journalctl -u cimb-agent -f` — look for `[agent] page reloaded successfully`
-- If stuck, restart: `sudo systemctl restart cimb-agent`
-
-### Agent keeps crashing and restarting
-
-**Symptom:** Agent restarts every few minutes (`systemctl status` shows restart loop)
-
-**Cause:** Usually a config file syntax error or missing required field
-
-**Fix:**
-1. Check logs: `sudo journalctl -u cimb-agent -f`
-2. Look for JSON parse errors in `config/` files
-3. Validate JSON: `python3 -m json.tool config/username.json`
-4. Delete/fix the corrupted file and restart: `sudo systemctl restart cimb-agent`
-
-## Systemd Deployment Troubleshooting
-
-### ModuleNotFoundError: No module named 'dotenv'
-
-**Symptom:** After deploying to VM, systemd starts the service but fails with:
-```
-ModuleNotFoundError: No module named 'dotenv'
-```
-
-**Cause:** The systemd service is running with the wrong Python — likely `/usr/bin/python3` instead of the virtual environment's Python at `/opt/cimb-rate-sgd-myr/.venv/bin/python`
-
-**Diagnosis:**
-1. Check which Python is being used:
-   ```bash
-   ps aux | grep agent.py
-   ```
-   If you see `/usr/bin/python3`, this is the problem.
-
-2. View full service logs:
-   ```bash
-   sudo journalctl -u cimb-agent -n 100 --no-pager -l
-   ```
-
-**Fix:**
-1. Verify the service file uses the venv Python:
-   ```bash
-   cat /etc/systemd/system/cimb-agent.service | grep ExecStart
-   ```
-   It must be:
-   ```
-   ExecStart=/opt/cimb-rate-sgd-myr/.venv/bin/python /opt/cimb-rate-sgd-myr/agent.py
-   ```
-
-2. If it's wrong, update the service file:
-   ```bash
-   sudo cp /opt/cimb-rate-sgd-myr/cimb-agent.service /etc/systemd/system/cimb-agent.service
-   ```
-
-3. Reload systemd and restart the service:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl restart cimb-agent
-   ```
-
-4. Verify it's now using the correct Python:
-   ```bash
-   ps aux | grep agent.py
-   ```
-   Should show: `/opt/cimb-rate-sgd-myr/.venv/bin/python`
-
-5. Check service status:
-   ```bash
-   sudo systemctl status cimb-agent --no-pager -l
-   ```
-   Should show: `active (running)`
-
-### Git deployment fails: tracked file blocked pull
-
-**Symptom:** GitHub Actions deployment fails with:
-```
-error: Your local changes to the following files would be overwritten by merge:
-  cimb-agent.service
-Please commit your changes or stash them before you merge.
-```
-
-**Cause:** Manual edits to `cimb-agent.service` on the VM created a local modification that blocks `git pull`
-
-**Fix:**
-The GitHub Actions workflow now automatically handles this with a hard reset:
-```bash
-git fetch origin main
-git reset --hard origin/main
-```
-
-This safely discards any local modifications and restores the VM's tracked files to the latest version from GitHub.
-
-If you need to force-fix this manually:
-```bash
-cd /opt/cimb-rate-sgd-myr
-git fetch origin main
-git reset --hard origin/main
-sudo cp cimb-agent.service /etc/systemd/system/cimb-agent.service
-sudo systemctl daemon-reload
-sudo systemctl restart cimb-agent
-sudo systemctl status cimb-agent --no-pager -l
-```
-
-### Viewing service logs
-
-To see what the agent is doing in real-time:
-```bash
-sudo journalctl -u cimb-agent -f
-```
-
-To see the last 100 lines of logs:
-```bash
-sudo journalctl -u cimb-agent -n 100 --no-pager -l
-```
-
-To see logs since the last restart:
-```bash
-sudo journalctl -u cimb-agent --since today --no-pager -l
-```
-
-### Service user vs SSH deploy user
-
-**Q:** Why does the systemd service use a different user (`cimbagent`) than the SSH deploy user?
-
-**A:** Security and privilege separation:
-- The SSH deploy user (e.g., `ubuntu`) needs sudo access to manage systemd
-- The service user (`cimbagent`) is a non-login system account with minimal privileges
-- This follows the principle of least privilege — the service only has access to what it needs
-- If the service is compromised, damage is limited to the `cimbagent` account and its files
-
-**Q:** How do I verify the service is running as `cimbagent`?
-
-**A:**
-```bash
-ps aux | grep agent.py
-```
-You should see the process owned by `cimbagent`, not your SSH user.
-
-## What is Not Implemented
-
-The following features are deliberately not implemented:
-
-- **Rate history storage** — rates are not stored in a database or log file; only live monitoring
-- **Rate prediction** — no ML or statistical prediction of future rates
-- **Multi-source rate comparison** — only CIMB's public rate is monitored
-- **Web dashboard** — no web UI; only Discord commands and buttons
-- **Banking automation** — no actual fund transfers or bank integration
-- **Direct API access** — CIMB rate data comes only from page reload of the public website, not a direct API
-- **Rate CSV export** — no historical data export capability
-- **Webhook integration** — alerts go only to Discord DMs, no webhooks
-- **Telegram/Email alerts** — only Discord DMs supported
-
-## Security Notes
-
-- **Bot token is secret** — never commit `.env` to Git; it's in `.gitignore`
-- **User IDs are in config files** — user Discord IDs are stored in JSON in `config/`; keep `config/` directory private
-- **No banking credentials stored** — the agent only reads the public CIMB rate page; no logins, passwords, or API keys for banking
-- **SSH key for deployment** — keep your VM SSH key safe; add it only to GitHub Secrets, never commit it
-- **Discord server should be private** — use a private Discord server for bot testing/deployment
-- **User configs are atomic** — config file writes are atomic (all-or-nothing); no data loss on crash
-- **File watcher detects changes** — new config files are detected within 1 second without restarting the agent
+- [docs/deployment.md](docs/deployment.md) — Detailed deployment guide and troubleshooting
