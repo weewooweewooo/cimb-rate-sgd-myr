@@ -104,7 +104,9 @@ async def _send_update_result(
 
 
 # Build the settings embed used by the menu command.
-def _build_menu_embed(config: Dict[str, Any], snapshot: Dict[str, Any]) -> discord.Embed:
+def _build_menu_embed(
+    config: Dict[str, Any], snapshot: Dict[str, Any]
+) -> discord.Embed:
     embed = discord.Embed(title="CIMB Rate \u2014 Your Settings")
     fields = [
         ("Live rate", _format_live_rate(snapshot.get("rate")), True),
@@ -115,7 +117,11 @@ def _build_menu_embed(config: Dict[str, Any], snapshot: Dict[str, Any]) -> disco
             f"{config.get('active_start', '00:00')} - {config.get('active_end', '23:59')}",
             True,
         ),
-        ("Active days", ", ".join(config.get("active_days", DEFAULT_ACTIVE_DAYS)), True),
+        (
+            "Active days",
+            ", ".join(config.get("active_days", DEFAULT_ACTIVE_DAYS)),
+            True,
+        ),
         ("Enabled", str(bool(config.get("enabled", False))), True),
         ("Peak rate", f"{float(config.get('peak_rate', 0.0)):.4f}", True),
     ]
@@ -230,9 +236,7 @@ class ToggleView(discord.ui.View):
             self.discord_user_id, {"enabled": enabled}
         )
         if not ok:
-            await interaction.response.send_message(
-                "Failed to update.", ephemeral=True
-            )
+            await interaction.response.send_message("Failed to update.", ephemeral=True)
             return
         await interaction.response.edit_message(content=message, view=None)
 
@@ -257,16 +261,21 @@ class DaySelectView(discord.ui.View):
             icon = "\u2705" if is_active else "\u274c"
             button = discord.ui.Button(
                 label=f"{icon} {DAY_LABELS[day]}",
-                style=discord.ButtonStyle.success
-                if is_active
-                else discord.ButtonStyle.secondary,
+                style=(
+                    discord.ButtonStyle.success
+                    if is_active
+                    else discord.ButtonStyle.secondary
+                ),
                 custom_id=f"day_{day}",
                 row=0 if index < 4 else 1,
             )
             button.callback = self._make_toggle_callback(day)
             self.add_item(button)
         save_button = discord.ui.Button(
-            label="Save", style=discord.ButtonStyle.primary, custom_id="save_days", row=2
+            label="Save",
+            style=discord.ButtonStyle.primary,
+            custom_id="save_days",
+            row=2,
         )
         save_button.callback = self._save_callback
         self.add_item(save_button)
@@ -562,9 +571,7 @@ class RateCommands(commands.Cog):
         snapshot = self.bot.snapshot_provider()
         embed = _build_menu_embed(config, snapshot)
         view = MenuView(self.bot.config_loader)
-        await interaction.response.send_message(
-            embed=embed, view=view, ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # Discord bot with slash commands and minimal intents.
