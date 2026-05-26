@@ -254,8 +254,9 @@ class DaySelectView(discord.ui.View):
         self.clear_items()
         for index, day in enumerate(ALL_DAYS):
             is_active = day in self.selected
+            icon = "\u2705" if is_active else "\u274c"
             button = discord.ui.Button(
-                label=f"{'\u2705' if is_active else '\u274c'} {DAY_LABELS[day]}",
+                label=f"{icon} {DAY_LABELS[day]}",
                 style=discord.ButtonStyle.success
                 if is_active
                 else discord.ButtonStyle.secondary,
