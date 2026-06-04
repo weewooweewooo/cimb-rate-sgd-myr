@@ -57,7 +57,10 @@ class DiscordNotifier:
         if user is None:
             return False
         try:
-            await user.send(embed=self._build_embed(payload))
+            await user.send(
+                content=f"SGD → MYR: {payload.rate:.4f}",
+                embed=self._build_embed(payload),
+            )
             return True
         except Exception as exc:
             print(f"[notifier] dm failed to {payload.discord_user_id}: {exc}")
