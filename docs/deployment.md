@@ -2,6 +2,8 @@
 
 This document explains how the CI/CD pipeline works, how to set up GitHub Secrets, and how to manually deploy if needed.
 
+Before publishing this repository as a public demo/template, sanitize screenshots and recordings under `docs/assets/`. Do not commit `.env`, config JSON files, Discord tokens, VM IPs, SSH keys, user IDs, or raw screenshots that expose private Discord or infrastructure details.
+
 ## Overview
 
 The project uses **GitHub Actions** to automatically deploy to the GCP VM whenever code is pushed to the `main` branch.
@@ -188,3 +190,21 @@ Configuration files (`config/`, `.env`) are **not** overwritten by the deploymen
 - Check the GitHub Actions workflow at `.github/workflows/deploy.yml`
 - Review service logs: `sudo journalctl -u cimb-agent -f`
 - Check service status: `sudo systemctl status cimb-agent --no-pager`
+
+---
+
+## Public Demo Asset Safety
+
+Use `docs/assets/` for sanitized public screenshots only. Keep raw captures in `docs/assets/raw/` while editing them; that folder is gitignored.
+
+Do not commit:
+
+- `.env`
+- `config/*.json`
+- `state.json`
+- Discord bot tokens
+- VM IP addresses
+- SSH keys
+- `*.key` or `*.pem` private key files
+- Discord user IDs, usernames, or server names unless intentionally anonymized
+- unsanitized `.mov` recordings or raw screenshots

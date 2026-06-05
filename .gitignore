@@ -3,9 +3,11 @@
 
 # playwright browser profile — generated at runtime
 .playwright/
+.cache/
 
 # user configs — contain real Discord IDs, never commit
 config/*.json
+state.json
 
 # python
 __pycache__/
@@ -18,6 +20,12 @@ env/
 # file locks from config_loader
 *.lock
 *.tmp
+
+# secrets and raw demo assets
+*.key
+*.pem
+docs/assets/raw/
+*.mov
 
 # OS
 .DS_Store
