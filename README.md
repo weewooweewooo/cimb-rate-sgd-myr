@@ -20,7 +20,7 @@ The Discord embed shows the current live rate, the user's target rate, and the a
 
 ### Discord Bot Walkthrough
 
-[Watch the Discord bot demo video](docs/assets/discord-bot-demo.mp4)
+Demo video: [View/download MP4](docs/assets/discord-bot-demo.mp4)
 
 The demo video shows the self-hosted bot running as a Discord-first interface for checking status and managing per-user alert settings.
 
