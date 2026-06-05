@@ -45,10 +45,16 @@ The demo video shows the self-hosted bot running as a Discord-first interface fo
 
 ```mermaid
 flowchart LR
-    A[CIMB public rate page] --> B[Playwright scraper]
-    B --> C[Alert engine]
-    C --> D[Discord bot DM]
-    D --> E[User phone]
+    A[CIMB public SGD → MYR page] --> B[Playwright scraper]
+    B --> C[Live rate snapshot]
+    C --> D[Alert engine]
+
+    U[User config<br/>target rate, active window, enabled days] --> D
+
+    D --> E{Alert condition met?}
+    E -- No --> F[Continue monitoring]
+    E -- Yes --> G[Discord bot DM]
+    G --> H[Notify user]
 ```
 
 Runtime components:
