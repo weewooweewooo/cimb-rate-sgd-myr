@@ -6,14 +6,23 @@ This repository is prepared as a public template/demo project. It does not log i
 
 ## Demo
 
-Add sanitized screenshots under docs/assets/ before publishing.
+### Discord Rate Alert
 
-Planned demo assets:
+![Discord alert demo](docs/assets/discord-alert-demo.jpeg)
 
-- Discord settings menu: `docs/assets/discord-menu-demo.png`
-- Discord alert DM: `docs/assets/discord-alert-demo.png`
-- Architecture diagram: `docs/assets/architecture.png`
-- Optional short walkthrough: `docs/assets/demo.gif`
+The bot sends a Discord DM when the live CIMB SGD→MYR rate reaches the configured target. The mobile notification preview includes the live rate, for example:
+
+```text
+SGD → MYR: 3.1371
+```
+
+The Discord embed shows the current live rate, the user's target rate, and the active alert window used for that notification.
+
+### Discord Bot Walkthrough
+
+[Watch the Discord bot demo video](docs/assets/discord-bot-demo.mp4)
+
+The demo video shows the self-hosted bot running as a Discord-first interface for checking status and managing per-user alert settings.
 
 ## Features
 
