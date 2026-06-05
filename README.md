@@ -8,7 +8,13 @@ This repository is prepared as a public template/demo project. It does not log i
 
 ### Discord Rate Alert
 
-![Discord alert demo](docs/assets/discord-alert-demo.jpeg)
+<p align="center">
+  <img src="docs/assets/discord-alert-demo.jpeg" alt="Discord alert demo" width="320" />
+</p>
+
+<p align="center">
+  <em>Discord DM alert showing the live SGD → MYR rate.</em>
+</p>
 
 The bot sends a Discord DM when the live CIMB SGD→MYR rate reaches the configured target. The mobile notification preview includes the live rate, for example:
 
