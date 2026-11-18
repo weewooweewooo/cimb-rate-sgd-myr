@@ -17,7 +17,7 @@ from models import RateState
 from monitor import Fetchers, run_monitor
 from notifier import Notifier
 from providers.cimb import fetch_cimb_rate
-from providers.wise import fetch_wise_fee, fetch_wise_live
+from providers.wise import fetch_wise_fee, fetch_wise_history, fetch_wise_live
 from settings import ALERT_REFERENCE_SGD, DB_PATH, HTTP_TIMEOUT_SECONDS, LEGACY_CONFIG_DIR, USER_AGENT, load_secrets
 
 log = logging.getLogger("agent")
@@ -36,6 +36,13 @@ def make_fetchers(session: aiohttp.ClientSession) -> Fetchers:
         wise_live=lambda: fetch_wise_live(session),
         wise_fee=lambda amount: fetch_wise_fee(session, amount),
     )
+
+
+HISTORY_DAYS = 30
+
+
+def make_history_fetcher(session: aiohttp.ClientSession):
+    return lambda: fetch_wise_history(session, HISTORY_DAYS)
 
 
 def initial_state(db: Database) -> RateState:
@@ -71,7 +78,7 @@ async def run() -> None:
     state = initial_state(db)
     async with make_session() as session:
         bot = build_bot(db, state, secrets)
-        notifier = Notifier(bot, db, state)
+        notifier = Notifier(bot, db, state, history_fetcher=make_history_fetcher(session))
         bot_task = asyncio.create_task(bot.start(secrets.discord_bot_token), name="discord-bot")
         ready = asyncio.create_task(bot.wait_until_ready())
         await asyncio.wait({bot_task, ready}, return_when=asyncio.FIRST_COMPLETED)

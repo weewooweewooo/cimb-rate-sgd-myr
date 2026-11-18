@@ -24,3 +24,11 @@ def test_initial_state_uses_saved_wise_fee():
     assert agent.initial_state(db).wise_fee == WiseFee(0.53, 0.0025)
     db.save_wise_fee(WiseFee(0.6, 0.003), __import__("datetime").datetime(2026, 11, 18))
     assert agent.initial_state(db).wise_fee == WiseFee(0.6, 0.003)
+
+
+def test_make_history_fetcher_is_callable():
+    async def go():
+        async with agent.make_session() as session:
+            return agent.make_history_fetcher(session)
+
+    assert callable(asyncio.run(go()))

@@ -79,3 +79,63 @@ def test_panel_view_buttons():
 def test_panel_view_unsnooze_only_when_snoozed():
     later = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
     assert "Unsnooze" in _panel_labels(True, later)
+
+
+# ---- alert DM with chart (Phase 3) ---------------------------------------
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from models import User  # noqa: E402
+from notifier import Notifier  # noqa: E402
+from providers.wise import parse_wise_history  # noqa: E402
+
+HISTORY = parse_wise_history(json.loads((Path(__file__).parent / "fixtures" / "wise_history.json").read_text()))
+
+
+class FakeDM:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, **kwargs):
+        self.sent.append(kwargs)
+
+
+class FakeBot:
+    def __init__(self):
+        self.dm = FakeDM()
+
+    def get_user(self, _uid):
+        return self.dm
+
+
+def _send(history_fetcher):
+    async def go():
+        bot, db = FakeBot(), Database(":memory:")
+        state = RateState(cimb_rate=3.17, wise_rate=3.18)
+        notifier = Notifier(bot, db, state, history_fetcher=history_fetcher)
+        ok = await notifier.send_alert(User("1", "S", 3.16, True), state)
+        return ok, bot.dm.sent
+
+    return asyncio.run(go())
+
+
+def test_alert_with_chart():
+    async def history():
+        return HISTORY
+
+    ok, sent = _send(history)
+    assert ok and len(sent) == 1
+    assert sent[0]["file"].filename == "chart.png"
+    assert sent[0]["embed"].image.url == "attachment://chart.png"
+    assert sent[0]["content"].startswith("SGD → MYR:")
+
+
+def test_alert_without_chart_when_history_fails():
+    async def history():
+        raise RuntimeError("wise down")
+
+    ok, sent = _send(history)
+    assert ok and len(sent) == 1
+    assert "file" not in sent[0]
+    assert sent[0]["embed"].image.url is None
