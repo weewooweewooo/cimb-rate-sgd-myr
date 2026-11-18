@@ -49,3 +49,10 @@ def test_render_png():
     cimb = [(end - timedelta(hours=5), 3.170), (end - timedelta(hours=2), 3.172)]
     png = render_chart(HISTORY[-168:], cimb, 3.16, 3.18, (3.175, 3.185), 72)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_dates_shown_in_singapore_time():
+    from chart import date_formatter
+    from settings import TIMEZONE
+
+    assert date_formatter().tz == TIMEZONE

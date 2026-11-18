@@ -9,6 +9,14 @@ from datetime import datetime, timedelta
 Series = list[tuple[datetime, float]]
 
 
+def date_formatter():
+    import matplotlib.dates as mdates
+
+    from settings import TIMEZONE
+
+    return mdates.DateFormatter("%d %b", tz=TIMEZONE)
+
+
 def likely_band(history: Series, current: float) -> tuple[float, float]:
     """10th-90th percentile of past 24 h relative moves, applied to `current`."""
     times = [t for t, _ in history]
@@ -43,7 +51,6 @@ def render_chart(
     import matplotlib
 
     matplotlib.use("Agg")
-    import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(8, 4), dpi=110)
@@ -58,7 +65,7 @@ def render_chart(
             now = max(stamps)
             ax.fill_between([now, now + timedelta(hours=24)], band[0], band[1], color="#4c6ef5", alpha=0.15)
             ax.plot([now], [current], "o", color="#4c6ef5")
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+        ax.xaxis.set_major_formatter(date_formatter())
         ax.grid(alpha=0.25)
         ax.legend(loc="upper left", fontsize=8, frameon=False)
         ax.set_title(caption(current, pct_rank), fontsize=8.5)

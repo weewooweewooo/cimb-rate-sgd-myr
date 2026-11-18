@@ -183,3 +183,25 @@ def test_sync_success_stores_hash_once():
 
     stored, expected = asyncio.run(go())
     assert stored == expected and len(calls) == 1
+
+
+def test_dm_failure_logged_once_per_user(caplog):
+    import logging
+
+    class BrokenDM:
+        async def send(self, **kwargs):
+            raise discord.DiscordException("cannot DM this user")
+
+    class Bot:
+        def get_user(self, _uid):
+            return BrokenDM()
+
+    async def go():
+        db, state = Database(":memory:"), RateState(cimb_rate=3.17)
+        notifier = Notifier(Bot(), db, state)
+        user = User("1", "S", 3.16, True)
+        return [await notifier.send_alert(user, state) for _ in range(3)]
+
+    caplog.set_level(logging.WARNING)
+    assert asyncio.run(go()) == [False, False, False]
+    assert len([r for r in caplog.records if r.levelname == "ERROR"]) == 1

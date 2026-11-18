@@ -32,6 +32,7 @@ class Notifier:
     ):
         self.bot, self.db, self.state = bot, db, state
         self.history_fetcher = history_fetcher
+        self._failing: set[str] = set()
 
     async def _get_user(self, user_id: str) -> discord.User | None:
         user = self.bot.get_user(int(user_id))
@@ -73,6 +74,9 @@ class Notifier:
         try:
             await target.send(**kwargs)
         except discord.DiscordException as exc:
-            log.error("DM to %s failed: %r", user.discord_user_id, exc)
+            if user.discord_user_id not in self._failing:  # once per streak, not every minute
+                self._failing.add(user.discord_user_id)
+                log.error("DM to %s failed: %r", user.discord_user_id, exc)
             return False
+        self._failing.discard(user.discord_user_id)
         return True
