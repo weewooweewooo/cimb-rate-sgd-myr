@@ -122,15 +122,6 @@ async def sync_commands(bot: "RateBot") -> None:
             log.error("command sync failed (will retry next start): %r", exc)
         else:
             bot.db.set_meta("commands_hash", digest)
-    guild_id = bot.secrets.discord_guild_id
-    if guild_id and bot.db.get_meta("guild_cleanup_done") is None:
-        guild = discord.Object(id=guild_id)
-        try:
-            bot.tree.clear_commands(guild=guild)
-            await bot.tree.sync(guild=guild)
-        except discord.DiscordException as exc:
-            log.error("old guild command cleanup failed (not retried): %r", exc)
-        bot.db.set_meta("guild_cleanup_done", "1")
 
 
 class RateBot(commands.Bot):

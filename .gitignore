@@ -1,12 +1,6 @@
 # environment — never commit real tokens
 .env
 
-.cache/
-
-# user configs — contain real Discord IDs, never commit
-config/*.json
-state.json
-
 # python
 __pycache__/
 *.pyc
@@ -14,10 +8,6 @@ __pycache__/
 .venv/
 venv/
 env/
-
-# file locks from config_loader
-*.lock
-*.tmp
 
 # secrets and raw demo assets
 *.key
@@ -29,6 +19,5 @@ docs/assets/raw/
 .DS_Store
 Thumbs.db
 
-# runtime database and migrated legacy configs
+# runtime database (users, rate history) — contains Discord IDs, never commit
 data/
-config/*.json.migrated

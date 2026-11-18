@@ -69,7 +69,7 @@ Runtime components:
 | `compare.py` | MYR received per provider, ranking, switch point, amount parsing. |
 | `alerts.py` | Alert / reset / none decision per user. |
 | `embeds.py`, `ui.py`, `notifier.py`, `bot.py` | Discord embeds, dropdown/buttons/modals, alert DMs, slash commands. |
-| `db.py` | SQLite storage. Imports old `config/*.json` user files once. |
+| `db.py` | SQLite storage for users, rate history and the Wise fee. |
 | `settings.py` | All tunable constants (schedule, intervals, fee defaults, presets). |
 | `cimb-agent.service` | systemd unit for the VM. |
 
@@ -113,7 +113,7 @@ This project is notification-only:
 Never commit:
 
 - `.env`
-- `config/*.json`, `data/` (user data and Discord IDs)
+- `data/` (SQLite database with Discord IDs)
 - Discord bot tokens
 - VM IP addresses
 - SSH keys
@@ -152,14 +152,11 @@ pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Edit `.env`. It only holds secrets; everything else lives in `settings.py`:
+Edit `.env`. It only holds the bot token; everything else lives in `settings.py`:
 
 ```env
 DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_GUILD_ID=
 ```
-
-`DISCORD_GUILD_ID` is optional. It's used once to remove old server-scoped commands from earlier versions.
 
 Check the rate sources, then run the agent and the tests:
 
@@ -172,8 +169,6 @@ pytest -q
 ## User Settings
 
 Users register with `/reg` and manage settings with `/f`, `/t` and `/a`. Settings and rate history are stored in `data/rates.db` (SQLite, gitignored).
-
-Upgrading from the JSON-config version: on first start, every `config/*.json` user file is imported automatically and renamed to `*.json.migrated`.
 
 ## File Structure
 

@@ -121,7 +121,7 @@ def run(coro_fn):
 
 
 def _bot():
-    return build_bot(Database(":memory:"), RateState(), Secrets("x", None))
+    return build_bot(Database(":memory:"), RateState(), Secrets("x"))
 
 
 def test_command_set():
@@ -242,7 +242,7 @@ def test_alert_without_chart_when_history_fails():
 
 def test_sync_failures_do_not_raise():
     async def go():
-        bot = build_bot(Database(":memory:"), RateState(), Secrets("x", 123))
+        bot = build_bot(Database(":memory:"), RateState(), Secrets("x"))
         await register_commands(bot)
 
         async def boom(*args, **kwargs):
@@ -250,18 +250,16 @@ def test_sync_failures_do_not_raise():
 
         bot.tree.sync = boom
         await sync_commands(bot)
-        return bot.db.get_meta("commands_hash"), bot.db.get_meta("guild_cleanup_done")
+        return bot.db.get_meta("commands_hash")
 
-    stored_hash, cleanup_done = asyncio.run(go())
-    assert stored_hash is None  # retry the global sync next start
-    assert cleanup_done == "1"
+    assert asyncio.run(go()) is None  # not stored, so the sync is retried next start
 
 
 def test_sync_success_stores_hash_once():
     calls = []
 
     async def go():
-        bot = build_bot(Database(":memory:"), RateState(), Secrets("x", None))
+        bot = build_bot(Database(":memory:"), RateState(), Secrets("x"))
         await register_commands(bot)
 
         async def ok(*args, **kwargs):

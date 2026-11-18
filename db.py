@@ -1,7 +1,6 @@
 """SQLite storage: users, rate history, Wise fee, small key/value meta."""
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from dataclasses import fields
@@ -145,30 +144,3 @@ class Database:
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
         )
-
-    # ---- legacy JSON import -----------------------------------------
-
-    def import_legacy_configs(self, config_dir: str | Path) -> int:
-        directory = Path(config_dir)
-        if not directory.is_dir():
-            return 0
-        imported = 0
-        for path in sorted(directory.glob("*.json")):
-            try:
-                raw = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as exc:
-                log.error("legacy config %s unreadable: %s", path.name, exc)
-                continue
-            uid = str(raw.get("discord_user_id", "")).strip() if isinstance(raw, dict) else ""
-            if not uid or self.get_user(uid) is not None:
-                continue
-            self.create_user(uid, str(raw.get("name") or "User"), float(raw.get("target_rate", DEFAULT_TARGET)))
-            self.update_user(
-                uid,
-                enabled=bool(raw.get("enabled", True)),
-                peak_rate=float(raw.get("peak_rate") or 0.0),
-                last_alerted_at=raw.get("last_alerted_at"),
-            )
-            path.rename(path.with_name(path.name + ".migrated"))
-            imported += 1
-        return imported

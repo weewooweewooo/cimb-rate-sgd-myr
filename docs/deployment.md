@@ -181,7 +181,7 @@ The deployment pipeline modifies the following on the VM:
 - Source code in `/opt/cimb-rate-sgd-myr` (via `git pull`)
 - Service state (restart of `cimb-agent`)
 
-Runtime data (`data/rates.db`, legacy `config/`) and `.env` are **not** overwritten by the deployment—only code changes are pulled. The `data/` directory must be writable by the `cimbagent` service user.
+Runtime data (`data/rates.db`) and `.env` are **not** overwritten by the deployment—only code changes are pulled. The `data/` directory must be writable by the `cimbagent` service user.
 
 ---
 
@@ -200,7 +200,7 @@ Use `docs/assets/` for sanitized public screenshots only. Keep raw captures in `
 Do not commit:
 
 - `.env`
-- `config/*.json`, `data/`
+- `data/` (SQLite database)
 - Discord bot tokens
 - VM IP addresses
 - SSH keys

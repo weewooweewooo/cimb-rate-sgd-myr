@@ -1,6 +1,6 @@
 """Project constants and secret loading.
 
-Only secrets live in .env (DISCORD_BOT_TOKEN, DISCORD_GUILD_ID).
+Only the secret bot token lives in .env (DISCORD_BOT_TOKEN).
 Everything else that tunes the bot is a constant here.
 """
 from __future__ import annotations
@@ -47,14 +47,12 @@ DEFAULT_TARGET = 3.1000
 
 # Storage.
 DB_PATH = "data/rates.db"
-LEGACY_CONFIG_DIR = "config"
 HISTORY_RETENTION_DAYS = 90
 
 
 @dataclass(frozen=True)
 class Secrets:
     discord_bot_token: str
-    discord_guild_id: int | None
 
 
 def load_secrets() -> Secrets:
@@ -62,5 +60,4 @@ def load_secrets() -> Secrets:
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("DISCORD_BOT_TOKEN is required")
-    guild = os.getenv("DISCORD_GUILD_ID", "").strip()
-    return Secrets(token, int(guild) if guild else None)
+    return Secrets(token)

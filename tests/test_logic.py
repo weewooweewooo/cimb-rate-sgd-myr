@@ -30,20 +30,17 @@ from providers.wise import parse_wise_history
 # ---- settings & models -----------------------------------------------------
 
 
+def test_load_secrets_reads_token(monkeypatch):
+    monkeypatch.setattr(settings, "load_dotenv", lambda: None)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "x")
+    assert settings.load_secrets() == settings.Secrets("x")
+
+
 def test_load_secrets_requires_token(monkeypatch):
     monkeypatch.setattr(settings, "load_dotenv", lambda: None)
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="DISCORD_BOT_TOKEN is required"):
         settings.load_secrets()
-
-
-def test_load_secrets_optional_guild(monkeypatch):
-    monkeypatch.setattr(settings, "load_dotenv", lambda: None)
-    monkeypatch.setenv("DISCORD_BOT_TOKEN", "x")
-    monkeypatch.delenv("DISCORD_GUILD_ID", raising=False)
-    assert settings.load_secrets() == settings.Secrets("x", None)
-    monkeypatch.setenv("DISCORD_GUILD_ID", "123")
-    assert settings.load_secrets().discord_guild_id == 123
 
 
 def test_wise_fee_for():
@@ -307,40 +304,6 @@ def test_file_db_persists(tmp_path):
     path = tmp_path / "sub" / "rates.db"
     Database(path).create_user("1", "A")
     assert Database(path).get_user("1").name == "A"
-
-
-def test_import_any_json_name(tmp_path):
-    (tmp_path / "sean.json").write_text(json.dumps({
-        "discord_user_id": "1", "name": "S", "target_rate": 3.16, "enabled": True,
-        "peak_rate": 3.17, "last_alerted_at": "2026-11-17T01:00:00+00:00", "active_days": ["mon"],
-    }))
-    (tmp_path / "user_2.json").write_text(json.dumps({"discord_user_id": "2", "name": "T"}))
-    db = Database(":memory:")
-    assert db.import_legacy_configs(tmp_path) == 2
-    user = db.get_user("1")
-    assert (user.target_rate, user.enabled, user.peak_rate) == (3.16, True, 3.17)
-    assert db.get_user("2").target_rate == 3.1
-    assert (tmp_path / "sean.json.migrated").exists()
-    assert not (tmp_path / "sean.json").exists()
-
-
-def test_import_skips_malformed(tmp_path):
-    (tmp_path / "bad.json").write_text("{not json")
-    (tmp_path / "noid.json").write_text("{}")
-    assert Database(":memory:").import_legacy_configs(tmp_path) == 0
-    assert (tmp_path / "bad.json").exists()
-
-
-def test_import_is_idempotent(tmp_path):
-    (tmp_path / "a.json").write_text(json.dumps({"discord_user_id": "1", "name": "S"}))
-    db = Database(":memory:")
-    assert db.import_legacy_configs(tmp_path) == 1
-    assert db.import_legacy_configs(tmp_path) == 0
-    assert len(db.list_users()) == 1
-
-
-def test_import_missing_dir(tmp_path):
-    assert Database(":memory:").import_legacy_configs(tmp_path / "nope") == 0
 
 
 def test_prune():

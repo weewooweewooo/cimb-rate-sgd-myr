@@ -19,7 +19,7 @@ from monitor import Fetchers, run_monitor
 from notifier import Notifier
 from providers.cimb import fetch_cimb_rate
 from providers.wise import fetch_wise_fee, fetch_wise_history, fetch_wise_live
-from settings import ALERT_REFERENCE_SGD, DB_PATH, HTTP_TIMEOUT_SECONDS, LEGACY_CONFIG_DIR, USER_AGENT, load_secrets
+from settings import ALERT_REFERENCE_SGD, DB_PATH, HTTP_TIMEOUT_SECONDS, USER_AGENT, load_secrets
 
 log = logging.getLogger("agent")
 
@@ -75,7 +75,6 @@ async def check() -> int:
 async def run() -> None:
     secrets = load_secrets()
     db = Database(DB_PATH)
-    db.import_legacy_configs(LEGACY_CONFIG_DIR)
     state = initial_state(db)
     async with make_session() as session:
         chart_maker = ChartMaker(make_history_fetcher(session), db)
