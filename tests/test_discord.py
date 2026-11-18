@@ -534,3 +534,28 @@ def test_today_changes_from_first_reading_of_the_day():
     assert round(changes["cimb"], 4) == 0.0129
     assert changes.get("wise") is None
 
+
+
+def test_send_notice_dms_users_with_alerts_on():
+    sent = {}
+
+    class DM:
+        def __init__(self, uid):
+            self.uid = uid
+
+        async def send(self, content=None, **kwargs):
+            sent[self.uid] = content
+
+    class Bot:
+        def get_user(self, uid):
+            return DM(str(uid))
+
+    async def go():
+        db = Database(":memory:")
+        db.create_user("1", "Sean")
+        db.create_user("2", "Jo")
+        db.update_user("2", enabled=False)
+        await Notifier(Bot(), db, RateState()).send_notice("Heads-up: test")
+
+    asyncio.run(go())
+    assert sent == {"1": "Heads-up: test"}

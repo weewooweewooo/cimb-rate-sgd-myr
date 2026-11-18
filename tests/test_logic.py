@@ -537,3 +537,48 @@ def test_load_secrets_survives_unreadable_env_file(monkeypatch):
     monkeypatch.setattr(settings, "load_dotenv", unreadable)
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "from-systemd")
     assert settings.load_secrets() == settings.Secrets("from-systemd")
+
+
+# ---- outage notices -----------------------------------------------------------
+
+from monitor import notify_health  # noqa: E402
+
+
+def test_notice_after_15_minutes_then_recovery():
+    h, t0 = FetchHealth(), NOW
+    h.failed("cimb", "boom", t0)
+    h.failed("cimb", "boom", t0 + timedelta(minutes=10))
+    assert h.due_notices(t0 + timedelta(minutes=14)) == []
+    (down,) = h.due_notices(t0 + timedelta(minutes=15))
+    assert down.startswith("Heads-up: the bot hasn't been able to read CIMB's rate for 15 minutes.")
+    assert "Alerts use Wise only" in down
+    assert h.due_notices(t0 + timedelta(minutes=30)) == []  # only once per outage
+    h.ok("cimb", t0 + timedelta(minutes=40))
+    assert h.due_notices(t0 + timedelta(minutes=41)) == ["CIMB's rate is readable again. Alerts are back to normal."]
+
+
+def test_short_blip_sends_nothing():
+    h = FetchHealth()
+    h.failed("wise", "boom", NOW)
+    h.ok("wise", NOW + timedelta(minutes=5))
+    assert h.due_notices(NOW + timedelta(minutes=20)) == []
+
+
+def test_wise_fee_failures_never_notify():
+    h = FetchHealth()
+    h.failed("wise fee", "boom", NOW)
+    assert h.due_notices(NOW + timedelta(hours=3)) == []
+
+
+def test_notify_health_sends_each_notice():
+    class Sender:
+        def __init__(self):
+            self.notices = []
+
+        async def send_notice(self, text):
+            self.notices.append(text)
+
+    h, sender = FetchHealth(), Sender()
+    h.failed("wise", "boom", NOW)
+    asyncio.run(notify_health(h, sender, NOW + timedelta(minutes=16)))
+    assert len(sender.notices) == 1 and "Wise's rate" in sender.notices[0]

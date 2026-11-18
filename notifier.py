@@ -62,3 +62,16 @@ class Notifier:
             return False
         self._failing.discard(user.discord_user_id)
         return True
+
+    async def send_notice(self, text: str) -> None:
+        """Plain DM to every user with alerts on (e.g. a rate source is down)."""
+        for user in self.db.list_users():
+            if not user.enabled:
+                continue
+            target = await self._get_user(user.discord_user_id)
+            if target is None:
+                continue
+            try:
+                await target.send(content=text)
+            except discord.DiscordException as exc:
+                log.error("notice to %s failed: %r", user.discord_user_id, exc)
