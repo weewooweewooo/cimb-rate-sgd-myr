@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 import aiohttp
 
 from models import WiseFee
 from providers import ProviderError
-from settings import WISE_ALLOWED_PAYINS, WISE_LIVE_URL, WISE_PRICE_URL
+from settings import WISE_ALLOWED_PAYINS, WISE_HISTORY_URL, WISE_LIVE_URL, WISE_PRICE_URL
 
 
 def parse_wise_live(payload: object) -> float:
@@ -57,3 +58,21 @@ async def fetch_wise_fee(session: aiohttp.ClientSession, amount_sgd: float) -> W
     params = {"sourceAmount": f"{amount_sgd:.0f}", "sourceCurrency": "SGD", "targetCurrency": "MYR"}
     payload = await _get_json(session, WISE_PRICE_URL, params)
     return parse_wise_fee(payload, amount_sgd)
+
+
+def parse_wise_history(payload: object) -> list[tuple[datetime, float]]:
+    if not isinstance(payload, list) or not payload:
+        raise ProviderError("Wise history is not a non-empty list")
+    points: list[tuple[datetime, float]] = []
+    for item in payload:
+        value = item.get("value") if isinstance(item, dict) else None
+        stamp = item.get("time") if isinstance(item, dict) else None
+        if not isinstance(value, (int, float)) or not isinstance(stamp, (int, float)) or value <= 0:
+            raise ProviderError("Wise history point malformed")
+        points.append((datetime.fromtimestamp(stamp / 1000, tz=timezone.utc), float(value)))
+    return sorted(points)
+
+
+async def fetch_wise_history(session: aiohttp.ClientSession, days: int) -> list[tuple[datetime, float]]:
+    params = {"source": "SGD", "target": "MYR", "length": str(days), "resolution": "hourly", "unit": "day"}
+    return parse_wise_history(await _get_json(session, WISE_HISTORY_URL, params))
