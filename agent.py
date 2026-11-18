@@ -12,6 +12,7 @@ import sys
 import aiohttp
 
 from bot import build_bot
+from chart_service import ChartMaker
 from db import Database
 from models import RateState
 from monitor import Fetchers, run_monitor
@@ -77,8 +78,9 @@ async def run() -> None:
     db.import_legacy_configs(LEGACY_CONFIG_DIR)
     state = initial_state(db)
     async with make_session() as session:
-        bot = build_bot(db, state, secrets)
-        notifier = Notifier(bot, db, state, history_fetcher=make_history_fetcher(session))
+        chart_maker = ChartMaker(make_history_fetcher(session), db)
+        bot = build_bot(db, state, secrets, chart_maker)
+        notifier = Notifier(bot, db, state, chart_maker=chart_maker)
         bot_task = asyncio.create_task(bot.start(secrets.discord_bot_token), name="discord-bot")
         ready = asyncio.create_task(bot.wait_until_ready())
         await asyncio.wait({bot_task, ready}, return_when=asyncio.FIRST_COMPLETED)

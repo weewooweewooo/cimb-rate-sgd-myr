@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from chart_service import ChartMaker
 from db import Database
 from models import RateState
 from settings import ALERT_REFERENCE_SGD, DEFAULT_TARGET, Secrets
@@ -93,7 +94,13 @@ class RateCommands(commands.Cog):
         if not await self._ensure_dm(interaction):
             return
         await show_panel(
-            interaction, self.bot.db, self.bot.state, str(interaction.user.id), ALERT_REFERENCE_SGD, edit=False
+            interaction,
+            self.bot.db,
+            self.bot.state,
+            str(interaction.user.id),
+            ALERT_REFERENCE_SGD,
+            self.bot.chart_maker,
+            edit=False,
         )
 
     @app_commands.command(name="help", description="Show what each command does")
@@ -127,9 +134,10 @@ async def sync_commands(bot: "RateBot") -> None:
 
 
 class RateBot(commands.Bot):
-    def __init__(self, db: Database, state: RateState, secrets: Secrets):
+    def __init__(self, db: Database, state: RateState, secrets: Secrets, chart_maker: ChartMaker | None = None):
         super().__init__(command_prefix="!", intents=discord.Intents.none())
         self.db, self.state, self.secrets = db, state, secrets
+        self.chart_maker = chart_maker
 
     async def setup_hook(self) -> None:
         self.add_view(AlertView(self.db, self.state))
@@ -140,7 +148,9 @@ class RateBot(commands.Bot):
         log.error("command %s failed: %r", getattr(interaction.command, "name", "?"), error)
 
 
-def build_bot(db: Database, state: RateState, secrets: Secrets) -> RateBot:
-    bot = RateBot(db, state, secrets)
+def build_bot(
+    db: Database, state: RateState, secrets: Secrets, chart_maker: ChartMaker | None = None
+) -> RateBot:
+    bot = RateBot(db, state, secrets, chart_maker)
     bot.tree.on_error = bot.on_app_command_error
     return bot

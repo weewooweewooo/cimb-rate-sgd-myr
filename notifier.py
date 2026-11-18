@@ -1,33 +1,19 @@
-"""Send alert DMs (with a history chart when Wise history is available)."""
+"""Send alert DMs (with a history chart when one can be drawn)."""
 from __future__ import annotations
 
-import asyncio
-import io
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable
+from datetime import datetime, timezone
 
 import discord
 
-from chart import likely_band, percentile_rank, render_chart
+from chart_service import CHART_FILENAME, ChartMaker
 from db import Database
 from embeds import alert_preview_text, build_alert_embed
-from models import RateState, User, WiseFee
+from models import RateState, User
 from settings import ALERT_REFERENCE_SGD
 from ui import AlertView
 
 log = logging.getLogger(__name__)
-
-def wise_net_series(
-    mid: list[tuple[datetime, float]], fee: WiseFee, amount_sgd: float
-) -> list[tuple[datetime, float]]:
-    """Wise rate after its fee, i.e. MYR received per SGD sent at `amount_sgd`."""
-    keep = (amount_sgd - fee.fee_for(amount_sgd)) / amount_sgd
-    return [(t, v * keep) for t, v in mid]
-
-
-HistoryFetcher = Callable[[], Awaitable[list[tuple[datetime, float]]]]
-CHART_DAYS = 7
 
 
 class Notifier:
@@ -36,10 +22,10 @@ class Notifier:
         bot: discord.Client,
         db: Database,
         state: RateState,
-        history_fetcher: HistoryFetcher | None = None,
+        chart_maker: ChartMaker | None = None,
     ):
         self.bot, self.db, self.state = bot, db, state
-        self.history_fetcher = history_fetcher
+        self.chart_maker = chart_maker
         self._failing: set[str] = set()
 
     async def _get_user(self, user_id: str) -> discord.User | None:
@@ -52,25 +38,6 @@ class Notifier:
             log.error("fetch user %s failed: %r", user_id, exc)
             return None
 
-    async def _chart_file(self, user: User, state: RateState, now: datetime) -> discord.File | None:
-        if self.history_fetcher is None or state.wise_rate is None:
-            return None
-        try:
-            history = await self.history_fetcher()
-            since = now - timedelta(days=CHART_DAYS)
-            mid = [point for point in history if point[0] >= since]
-            cimb = self.db.rates_since("cimb", since)
-            band = likely_band(history, state.wise_rate)
-            rank = percentile_rank(history, state.wise_rate)
-            net = wise_net_series(mid, state.wise_fee, ALERT_REFERENCE_SGD)
-            png = await asyncio.to_thread(
-                render_chart, mid, cimb, user.target_rate, state.wise_rate, band, rank, net
-            )
-        except Exception as exc:
-            log.error("chart skipped: %r", exc)
-            return None
-        return discord.File(io.BytesIO(png), filename="chart.png")
-
     async def send_alert(self, user: User, state: RateState) -> bool:
         target = await self._get_user(user.discord_user_id)
         if target is None:
@@ -78,9 +45,9 @@ class Notifier:
         now = datetime.now(timezone.utc)
         embed = build_alert_embed(user, state, ALERT_REFERENCE_SGD, now)
         kwargs = {"content": alert_preview_text(state), "embed": embed, "view": AlertView(self.db, state)}
-        chart = await self._chart_file(user, state, now)
+        chart = await self.chart_maker.make(user.target_rate, state, now) if self.chart_maker else None
         if chart is not None:
-            embed.set_image(url="attachment://chart.png")
+            embed.set_image(url=f"attachment://{CHART_FILENAME}")
             kwargs["file"] = chart
         try:
             await target.send(**kwargs)

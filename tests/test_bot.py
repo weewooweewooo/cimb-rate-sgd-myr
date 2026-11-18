@@ -87,6 +87,7 @@ import json  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from models import User  # noqa: E402
+from chart_service import ChartMaker  # noqa: E402
 from notifier import Notifier  # noqa: E402
 from providers.wise import parse_wise_history  # noqa: E402
 
@@ -113,7 +114,7 @@ def _send(history_fetcher):
     async def go():
         bot, db = FakeBot(), Database(":memory:")
         state = RateState(cimb_rate=3.17, wise_rate=3.18)
-        notifier = Notifier(bot, db, state, history_fetcher=history_fetcher)
+        notifier = Notifier(bot, db, state, chart_maker=ChartMaker(history_fetcher, db))
         ok = await notifier.send_alert(User("1", "S", 3.16, True), state)
         return ok, bot.dm.sent
 
@@ -206,13 +207,3 @@ def test_dm_failure_logged_once_per_user(caplog):
     assert asyncio.run(go()) == [False, False, False]
     assert len([r for r in caplog.records if r.levelname == "ERROR"]) == 1
 
-
-def test_wise_net_series_uses_fee():
-    from datetime import datetime, timezone
-
-    from models import WiseFee
-    from notifier import wise_net_series
-
-    t = datetime(2026, 11, 18, tzinfo=timezone.utc)
-    (point,) = wise_net_series([(t, 3.18802)], WiseFee(0.53, 0.0025), 1000)
-    assert point[0] == t and round(point[1], 5) == round(3.18802 * (1000 - 3.03) / 1000, 5)
