@@ -7,7 +7,8 @@ NOW = datetime(2026, 11, 18, 3, 0, tzinfo=timezone.utc)
 
 
 def u(**kw):
-    return User("1", "a", target_rate=3.16, enabled=True, **kw)
+    fields = {"target_rate": 3.16, "enabled": True, **kw}
+    return User("1", "a", **fields)
 
 
 def test_first_alert_at_target():
