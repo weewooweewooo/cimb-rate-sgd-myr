@@ -230,8 +230,25 @@ def test_step_required():
     assert decide(u(peak_rate=3.1600), 3.1610, NOW) == "alert"
 
 
-def test_reset_below_target():
-    assert decide(u(peak_rate=3.17), 3.1599, NOW) == "reset"
+def test_reset_needs_a_clear_drop_below_target():
+    # target 3.16: wobbling just under it keeps the last alert remembered (no re-ping storm)
+    assert decide(u(peak_rate=3.17), 3.1599, NOW) == "none"
+    assert decide(u(peak_rate=3.17), 3.1591, NOW) == "none"
+    # a clear drop (at least 0.0010 below target) resets, so the next climb alerts again
+    assert decide(u(peak_rate=3.17), 3.1590, NOW) == "reset"
+
+
+def test_hovering_at_target_alerts_once():
+    user = u()
+    pings = 0
+    for rate in (3.1601, 3.1599, 3.1601, 3.1598, 3.1602, 3.1599, 3.1601):
+        verdict = decide(user, rate, NOW)
+        if verdict == "alert":
+            pings += 1
+            user.peak_rate = rate
+        elif verdict == "reset":
+            user.peak_rate = 0.0
+    assert pings == 1
 
 
 def test_below_target_no_peak():
