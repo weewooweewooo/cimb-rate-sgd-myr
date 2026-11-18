@@ -8,6 +8,7 @@ User=cimbagent
 WorkingDirectory=/opt/cimb-rate-sgd-myr
 EnvironmentFile=/opt/cimb-rate-sgd-myr/.env
 Environment=PYTHONUNBUFFERED=1
+PrivateTmp=true
 ExecStart=/opt/cimb-rate-sgd-myr/.venv/bin/python /opt/cimb-rate-sgd-myr/agent.py
 Restart=always
 RestartSec=3

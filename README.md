@@ -1,8 +1,8 @@
 # cimb-rate-sgd-myr
 
-A Python Discord bot agent that monitors CIMB's public SGD->MYR exchange-rate page and sends Discord DM alerts when the rate reaches each user's configured target.
+A lightweight Python Discord bot that watches the SGD→MYR rate at **CIMB** and **Wise**. It works out how much MYR you would actually receive after fees, and DMs you when the best of the two reaches your target.
 
-This repository is prepared as a public template/demo project. It does not log in to CIMB, automate the CIMB mobile app, initiate transfers, store banking credentials, or perform any banking action.
+This repository is prepared as a public template/demo project. It does not log in to CIMB or Wise, automate any banking app, initiate transfers, store banking credentials, or perform any banking action.
 
 ## Demo
 
@@ -13,98 +13,88 @@ This repository is prepared as a public template/demo project. It does not log i
 </p>
 
 <p align="center">
-  <em>Discord DM alert showing the live SGD → MYR rate.</em>
+  <em>Discord DM alert showing the live SGD → MYR rate (screenshot from an earlier version).</em>
 </p>
 
-The bot sends a Discord DM when the live CIMB SGD→MYR rate reaches the configured target. The mobile notification preview includes the live rate, for example:
+The phone notification preview shows the best effective rate and who offers it:
 
 ```text
-SGD → MYR: 3.1371
+SGD → MYR: 3.1701 (CIMB)
 ```
 
-The Discord embed shows the current live rate, the user's target rate, and the active alert window used for that notification.
+The alert embed:
+
+- ranks CIMB and Wise by MYR received for SGD 1,000
+- shows Wise's fee and the mid-market rate
+- says where the cheaper provider switches, e.g. `Under SGD 1,390 → CIMB · above → Wise`
+
+Underneath, a **Compare** dropdown (200 / 500 / 1,000 / 2,000 / 3,000 / Other…) re-ranks the same message for any amount. **Open Wise** and **Snooze 1h** buttons sit next to it.
 
 ### Discord Bot Walkthrough
 
-Demo video: [View/download MP4](docs/assets/discord-bot-demo.mp4)
-
-The demo video shows the self-hosted bot running as a Discord-first interface for checking status and managing per-user alert settings.
+Demo video: [View/download MP4](docs/assets/discord-bot-demo.mp4) (earlier version)
 
 ## Features
 
-- Monitors CIMB's public SGD->MYR rate page with Playwright.
-- Sends Discord DM alerts when a configured target and peak-rate condition are met.
-- Supports per-user configuration through Discord slash commands.
-- Provides a mobile-friendly `/menu` flow for target rate, alert window, active days, and enable/disable settings.
-- Stores per-user config as local JSON files in `config/`.
-- Hot-reloads config file changes without restarting the agent.
-- Runs continuously on a VM with systemd restart behavior.
-- Keeps secrets in `.env` locally and GitHub Actions Secrets for deployment.
+- **Reads rates over plain HTTP, with no browser.**
+  - CIMB: its public page's hidden `rateList` value.
+  - Wise: its public live mid-market rate, plus its fee (cheapest bank/PayNow pay-in, refreshed daily).
+- **Compares what you actually receive.** CIMB has no fee. Wise charges a fixed part plus a percentage, so the winner depends on the amount.
+- **Alerts on the best effective rate after fees.** It re-alerts only when the rate climbs at least 0.0010 above your last alert.
+- **Fixed schedule:** Mon–Fri, 09:00–20:00 Singapore time. Nothing is fetched outside it.
+- **One `/f` panel** that updates in place: live rates, switch point, target, alerts on/off, compare any amount.
+- **One small SQLite file** for users and rate history.
+- **Errors-only logging.** Runs as a systemd service on a small VM, using ~30–70 MB RAM.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[CIMB public SGD → MYR page] --> B[Playwright scraper]
-    B --> C[Live rate snapshot]
-    C --> D[Alert engine]
-
-    U[User config<br/>target rate, active window, enabled days] --> D
-
-    D --> E{Alert condition met?}
-    E -- No --> F[Continue monitoring]
-    E -- Yes --> G[Discord bot DM]
-    G --> H[Notify user]
+    A[CIMB public SGD → MYR page] --> C[Monitor every 60 s<br/>Mon–Fri 09:00–20:00 SGT]
+    B[Wise live rate + daily fee] --> C
+    C --> D[(SQLite<br/>users, rate history)]
+    C --> E[Compare after fees<br/>CIMB vs Wise]
+    E --> F{Best ≥ target?}
+    F -- No --> C
+    F -- Yes --> G[Discord DM alert<br/>ranked + switch point + Compare]
 ```
 
 Runtime components:
 
-- `agent.py` loads settings, opens the Playwright browser context, reads the live rate, evaluates alert windows, tracks peak rates, and starts the Discord bot.
-- `bot.py` defines the Discord slash commands and interactive settings views.
-- `config_loader.py` reads, writes, and watches per-user JSON config files.
-- `notifier.py` builds and sends Discord DM alert embeds.
-- `cimb-agent.service` runs the agent as a systemd service on the VM.
+| File | Role |
+|---|---|
+| `agent.py` | Entrypoint. Starts the Discord bot and the monitor. `python agent.py --check` fetches rates once and exits. |
+| `monitor.py` | Schedule-aware 60 s poll loop. Stores rates and evaluates users. |
+| `providers/` | CIMB and Wise HTTP fetchers and parsers. |
+| `compare.py` | MYR received per provider, ranking, switch point, amount parsing. |
+| `alerts.py` | Alert / reset / none decision per user. |
+| `embeds.py`, `ui.py`, `notifier.py`, `bot.py` | Discord embeds, dropdown/buttons/modals, alert DMs, slash commands. |
+| `db.py` | SQLite storage. Imports old `config/*.json` user files once. |
+| `settings.py` | All tunable constants (schedule, intervals, fee defaults, presets). |
+| `cimb-agent.service` | systemd unit for the VM. |
 
-## How It Works
-
-1. The agent opens CIMB's public SGD->MYR rate page.
-2. Playwright reads the visible rate from the page at the configured interval.
-3. The alert engine checks whether each enabled user is inside their configured active day and active time window.
-4. If the current rate is at or above the user's target and higher than the stored peak rate, the bot sends a Discord DM alert.
-5. The user's `peak_rate` is updated after a successful alert so repeated notifications are not sent for the same rate level.
-6. When the live rate drops below the user's target, `peak_rate` resets to `0.0`.
-
-The service process can run 24/7. Monitoring work is gated by the configured active window and active days.
-
-## Discord Bot UX
-
-Users manage their own alert settings through Discord slash commands:
+## Discord Commands (DM only)
 
 | Command | Purpose |
 | --- | --- |
-| `/register` | Create a user config with default settings. |
-| `/status` | Show the current live rate and the user's alert config. |
-| `/settarget` | Set the target SGD->MYR rate. |
-| `/setwindow` | Set the active alert time window in `HH:MM` format. |
-| `/setdays` | Set active alert days. |
-| `/toggle` | Enable or disable alerts. |
-| `/menu` | Open the interactive settings panel. |
+| `/reg name` | Register with the default target (3.1000). |
+| `/t rate` | Set your target effective rate (after fees), e.g. `3.1650`. |
+| `/a on\|off` | Turn alerts on or off. |
+| `/f` | Open the panel: live rates, switch point, target, alerts toggle, compare any amount. |
 
-The `/menu` panel is designed for phone use. Users can adjust target rate, alert window, active days, and alert state without editing JSON manually.
+The `/f` panel is built for phones. Every button edits the same message instead of posting new ones.
 
 ## Deployment Overview
 
 The intended deployment is a small Linux VM running the agent with systemd:
 
-1. Install Python dependencies from `requirements.txt`.
-2. Install Playwright Chromium with `playwright install chromium`.
-3. Create a `.env` file on the VM with the Discord token and runtime settings.
-4. Keep per-user JSON config files in `config/` on the VM.
-5. Install `cimb-agent.service` under systemd.
-6. Use GitHub Actions Secrets for SSH deployment credentials.
-7. Push to `main` to deploy code changes and restart the service.
+1. Install Python dependencies from `requirements.txt` into `/opt/cimb-rate-sgd-myr/.venv`.
+2. Create `.env` with the Discord token (see below).
+3. Install `cimb-agent.service` under systemd.
+4. Use GitHub Actions Secrets for SSH deployment credentials.
+5. Push to `main` to deploy code changes and restart the service.
 
-The deployment workflow does not require banking credentials. It only deploys code, installs dependencies, copies the service file, reloads systemd, and restarts the agent.
+The deployment workflow does not need banking credentials. It deploys code, installs dependencies, copies the service file, reloads systemd and restarts the agent.
 
 See [docs/deployment.md](docs/deployment.md) for the VM and GitHub Actions guide.
 
@@ -112,18 +102,17 @@ See [docs/deployment.md](docs/deployment.md) for the VM and GitHub Actions guide
 
 This project is notification-only:
 
-- It does not log in to CIMB.
-- It does not automate the CIMB mobile app.
+- It does not log in to CIMB or Wise.
+- It does not automate any banking app.
 - It does not perform bank transfers.
 - It does not store bank account numbers, passwords, OTPs, or session cookies.
-- It only reads CIMB's public SGD->MYR rate page.
+- It only reads public rate pages/endpoints, sending nothing but the currency pair and an amount.
 - It sends alerts through Discord DMs.
 
 Never commit:
 
 - `.env`
-- `config/*.json`
-- `state.json`
+- `config/*.json`, `data/` (user data and Discord IDs)
 - Discord bot tokens
 - VM IP addresses
 - SSH keys
@@ -138,19 +127,18 @@ To adapt this repository for your own deployment:
 
 1. Fork the repository.
 2. Create your own Discord application and bot token.
-3. Copy `.env.example` to `.env` and fill in local values.
-4. Install dependencies and Playwright Chromium.
-5. Register users through Discord with `/register`, or create local JSON files in `config/`.
+3. Copy `.env.example` to `.env` and fill in the token.
+4. Install dependencies.
+5. Register through Discord with `/reg`.
 6. Deploy to your own VM and configure GitHub Actions Secrets for that VM.
-7. Replace placeholder demo assets with sanitized screenshots before sharing publicly.
+7. Replace demo assets with your own sanitized screenshots before sharing publicly.
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.10+
 - Git
 - Discord bot token
-- Playwright and Chromium
-- Dependencies listed in `requirements.txt`
+- Dependencies listed in `requirements.txt` (`discord.py`, `python-dotenv`)
 
 ## Local Setup
 
@@ -159,65 +147,58 @@ git clone https://github.com/yourusername/cimb-rate-sgd-myr.git
 cd cimb-rate-sgd-myr
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Edit `.env` and add your Discord bot token:
+Edit `.env`. It only holds secrets; everything else lives in `settings.py`:
 
 ```env
 DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_GUILD_ID=your_server_id
-SCRAPE_INTERVAL_MS=3000
-IDLE_SLEEP_MS=60000
-MAX_NULL_STREAK=5
-PAGE_RELOAD_INTERVAL_MS=60000
-TIMEZONE=Asia/Singapore
-CIMB_RATE_URL=https://www.cimbclicks.com.sg/sgd-to-myr
-PLAYWRIGHT_USER_DATA_DIR=.playwright
-CONFIG_DIR=config
+DISCORD_GUILD_ID=
 ```
 
-Run the agent:
+`DISCORD_GUILD_ID` is optional. It's used once to remove old server-scoped commands from earlier versions.
+
+Check the rate sources, then run the agent and the tests:
 
 ```bash
+python agent.py --check   # prints e.g. cimb=3.1768
 python agent.py
+pytest -q
 ```
 
-## User Config Example
+## User Settings
 
-Users can self-register with `/register`, or you can create a local config file such as `config/user_123456789012345678.json`:
+Users register with `/reg` and manage settings with `/f`, `/t` and `/a`. Settings and rate history are stored in `data/rates.db` (SQLite, gitignored).
 
-```json
-{
-  "name": "Demo User",
-  "discord_user_id": "123456789012345678",
-  "target_rate": 3.1000,
-  "active_start": "09:00",
-  "active_end": "19:00",
-  "active_days": ["mon", "tue", "wed", "thu", "fri"],
-  "enabled": true,
-  "last_alerted_at": null,
-  "peak_rate": 0.0
-}
-```
-
-Config files are intentionally gitignored because they contain Discord user IDs and personal alert preferences.
+Upgrading from the JSON-config version: on first start, every `config/*.json` user file is imported automatically and renamed to `*.json.migrated`.
 
 ## File Structure
 
 ```text
 cimb-rate-sgd-myr/
 |-- agent.py
+|-- monitor.py
+|-- alerts.py
+|-- compare.py
+|-- db.py
+|-- settings.py
+|-- models.py
+|-- schedule.py
 |-- bot.py
+|-- ui.py
+|-- embeds.py
 |-- notifier.py
-|-- config_loader.py
+|-- providers/
+|   |-- cimb.py
+|   `-- wise.py
+|-- tests/
 |-- cimb-agent.service
 |-- requirements.txt
+|-- requirements-dev.txt
 |-- .env.example
 |-- .github/workflows/deploy.yml
-|-- config/
 |-- docs/
 |   |-- deployment.md
 |   `-- assets/
@@ -226,11 +207,10 @@ cimb-rate-sgd-myr/
 
 ## What Is Not Implemented
 
-- Rate history storage
 - Rate prediction or forecasting
-- Multiple bank/rate sources
+- Providers other than CIMB and Wise
 - Web dashboard
 - Bank login automation
-- CIMB mobile app automation
+- Banking app automation
 - Bank transfers
 - Telegram, email, or SMS notifications

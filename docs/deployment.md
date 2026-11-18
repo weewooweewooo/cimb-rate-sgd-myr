@@ -52,7 +52,7 @@ To enable automated deployments, you must configure three GitHub Secrets in your
 
    | Secret Name | Value |
    |-------------|-------|
-   | `VM_HOST` | External IP of your GCP VM (e.g., `35.184.135.76`) |
+   | `VM_HOST` | External IP of your GCP VM (e.g., `203.0.113.10`) |
    | `VM_USER` | VM username (e.g., `ubuntu` or your GCP default user) |
    | `VM_SSH_KEY` | Full content of `~/.ssh/google_compute_engine` from the VM |
 
@@ -181,7 +181,7 @@ The deployment pipeline modifies the following on the VM:
 - Source code in `/opt/cimb-rate-sgd-myr` (via `git pull`)
 - Service state (restart of `cimb-agent`)
 
-Configuration files (`config/`, `.env`) are **not** overwritten by the deployment—only code changes are pulled.
+Runtime data (`data/rates.db`, legacy `config/`) and `.env` are **not** overwritten by the deployment—only code changes are pulled. The `data/` directory must be writable by the `cimbagent` service user.
 
 ---
 
@@ -200,8 +200,7 @@ Use `docs/assets/` for sanitized public screenshots only. Keep raw captures in `
 Do not commit:
 
 - `.env`
-- `config/*.json`
-- `state.json`
+- `config/*.json`, `data/`
 - Discord bot tokens
 - VM IP addresses
 - SSH keys

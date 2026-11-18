@@ -2,7 +2,7 @@
 #
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #
-#   VM_HOST     — GCP VM external IP (e.g., 35.184.135.76)
+#   VM_HOST     — GCP VM external IP (e.g., 203.0.113.10)
 #   VM_USER     — VM username (e.g., ubuntu or your GCP default user)
 #   VM_SSH_KEY  — Private SSH key for VM access
 #
