@@ -1,0 +1,6 @@
+[
+  {"payInMethod": "VISA_CREDIT", "payOutMethod": "BANK_TRANSFER", "total": 44, "variableFeePercent": 4.54},
+  {"payInMethod": "RECEIVE_BANK_TRANSFER", "payOutMethod": "BANK_TRANSFER", "total": 3.03, "variableFeePercent": 0.25},
+  {"payInMethod": "PAYNOW", "payOutMethod": "BALANCE", "total": 2.5, "variableFeePercent": 0.25},
+  {"payInMethod": "TRUSTED_PRE_FUND_TX", "payOutMethod": "BALANCE", "total": 2.5, "variableFeePercent": 0.25}
+]
