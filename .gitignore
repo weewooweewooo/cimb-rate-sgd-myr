@@ -1,8 +1,6 @@
 # environment — never commit real tokens
 .env
 
-# playwright browser profile — generated at runtime
-.playwright/
 .cache/
 
 # user configs — contain real Discord IDs, never commit
@@ -30,3 +28,7 @@ docs/assets/raw/
 # OS
 .DS_Store
 Thumbs.db
+
+# runtime database and migrated legacy configs
+data/
+config/*.json.migrated
