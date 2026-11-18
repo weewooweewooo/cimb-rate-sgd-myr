@@ -3,13 +3,36 @@ from __future__ import annotations
 
 import bisect
 import io
+import os
 import statistics
 from datetime import datetime, timedelta
+from pathlib import Path
 
 Series = list[tuple[datetime, float]]
 
 
+def ensure_mpl_config_dir(db_path: str | Path | None = None) -> Path:
+    """Give matplotlib a writable cache folder next to the database.
+
+    The bot user can't write to its home (/opt/cimb-rate-sgd-myr), so without
+    this matplotlib rebuilds its font cache in a temp dir on every restart
+    (slow first chart, plus a warning in the logs). Must run before importing
+    matplotlib; an explicit MPLCONFIGDIR setting wins.
+    """
+    if "MPLCONFIGDIR" in os.environ:
+        return Path(os.environ["MPLCONFIGDIR"])
+    if db_path is None:
+        from settings import DB_PATH
+
+        db_path = DB_PATH
+    path = Path(db_path).parent / "matplotlib"
+    path.mkdir(parents=True, exist_ok=True)
+    os.environ["MPLCONFIGDIR"] = str(path)
+    return path
+
+
 def date_formatter():
+    ensure_mpl_config_dir()
     import matplotlib.dates as mdates
 
     from settings import TIMEZONE
@@ -67,6 +90,7 @@ def render_chart(
     pct_rank: int,
     wise_net: Series | None = None,
 ) -> bytes:
+    ensure_mpl_config_dir()
     import matplotlib
 
     matplotlib.use("Agg")

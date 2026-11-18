@@ -582,3 +582,18 @@ def test_notify_health_sends_each_notice():
     h.failed("wise", "boom", NOW)
     asyncio.run(notify_health(h, sender, NOW + timedelta(minutes=16)))
     assert len(sender.notices) == 1 and "Wise's rate" in sender.notices[0]
+
+
+def test_matplotlib_cache_goes_to_writable_data_dir(tmp_path, monkeypatch):
+    import os
+
+    from chart import ensure_mpl_config_dir
+
+    monkeypatch.delenv("MPLCONFIGDIR", raising=False)
+    path = ensure_mpl_config_dir(tmp_path / "data" / "rates.db")
+    assert path == tmp_path / "data" / "matplotlib" and path.is_dir()
+    assert os.environ["MPLCONFIGDIR"] == str(path)
+
+    monkeypatch.setenv("MPLCONFIGDIR", "/somewhere/else")
+    ensure_mpl_config_dir(tmp_path / "data" / "rates.db")
+    assert os.environ["MPLCONFIGDIR"] == "/somewhere/else"  # an explicit setting wins
