@@ -81,6 +81,7 @@ Runtime components:
 | `/t rate` | Set your target effective rate (after fees), e.g. `3.1650`. |
 | `/a on\|off` | Turn alerts on or off. |
 | `/f` | Open the panel: live rates, switch point, target, alerts toggle, compare any amount. |
+| `/help` | Show what each command does. |
 
 The `/f` panel is built for phones. Every button edits the same message instead of posting new ones.
 

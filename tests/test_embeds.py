@@ -72,3 +72,14 @@ def test_panel_no_data():
     e = build_panel_embed(USER, RateState(), 1000, NOW)
     assert e.title == "⚙️ SGD → MYR · no data yet"
     assert "No rates yet" in e.description
+
+
+def test_help_embed_lists_every_command():
+    from embeds import build_help_embed
+
+    e = build_help_embed()
+    text = e.description + "".join(f.name + f.value for f in e.fields)
+    for cmd in ("/reg", "/f", "/t", "/a", "/help"):
+        assert cmd in text
+    assert "Mon–Fri" in text and "9am–8pm" in text
+    assert "Compare" in text and "Snooze" in text

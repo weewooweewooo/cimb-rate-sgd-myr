@@ -109,3 +109,32 @@ def build_panel_embed(user: User, state: RateState, amount_sgd: float, now: date
         lines += ["", f"For SGD {amount_sgd:,.0f}:  {ranked}"]
 
     return discord.Embed(title=title, description="\n".join(lines), color=PANEL_COLOR)
+
+
+HELP_COMMANDS = (
+    ("/f", "Your panel: live CIMB & Wise rates, which is cheaper for your amount, target, alerts on/off, compare any amount."),
+    ("/t rate", "Set your target rate after fees, e.g. `/t 3.1650`. You're alerted when CIMB or Wise reaches it."),
+    ("/a on|off", "Turn alerts on or off."),
+    ("/reg name", "Register (once) before using the other commands."),
+    ("/help", "Show this list."),
+)
+
+
+def build_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="SGD → MYR bot · commands",
+        description="Use these in a DM with me.",
+        color=PANEL_COLOR,
+    )
+    for name, text in HELP_COMMANDS:
+        embed.add_field(name=name, value=text, inline=False)
+    embed.add_field(
+        name="Alerts",
+        value=(
+            "Checked every minute, Mon–Fri 9am–8pm (Singapore). "
+            "Each alert has a **Compare** dropdown (200 / 500 / 1,000 / 2,000 / 3,000 / Other), "
+            "**Open Wise**, and **Snooze 1h**."
+        ),
+        inline=False,
+    )
+    return embed

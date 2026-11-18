@@ -12,11 +12,12 @@ from discord.ext import commands
 from db import Database
 from models import RateState
 from settings import ALERT_REFERENCE_SGD, DEFAULT_TARGET, Secrets
+from embeds import build_help_embed
 from ui import NOT_REGISTERED, AlertView, show_panel
 
 log = logging.getLogger(__name__)
 
-COMMAND_NAMES = ("reg", "t", "a", "f")
+COMMAND_NAMES = ("reg", "t", "a", "f", "help")
 DM_ONLY = "This bot only works in DMs. Message me directly."
 
 
@@ -59,7 +60,7 @@ class RateCommands(commands.Cog):
         self.bot.db.create_user(uid, name)
         await interaction.response.send_message(
             f"Registered as **{name}**! Default target {DEFAULT_TARGET:.4f}. "
-            "Use /f to see live rates and change settings.",
+            "Use /f to see live rates and change settings, or /help for all commands.",
             ephemeral=True,
         )
 
@@ -94,6 +95,10 @@ class RateCommands(commands.Cog):
         await show_panel(
             interaction, self.bot.db, self.bot.state, str(interaction.user.id), ALERT_REFERENCE_SGD, edit=False
         )
+
+    @app_commands.command(name="help", description="Show what each command does")
+    async def help(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(embed=build_help_embed(), ephemeral=True)
 
 
 async def register_commands(bot: "RateBot") -> None:

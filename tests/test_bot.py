@@ -22,7 +22,7 @@ def test_command_set():
         await register_commands(bot)
         return sorted(c.name for c in bot.tree.get_commands())
 
-    assert run(go) == ["a", "f", "reg", "t"]
+    assert run(go) == ["a", "f", "help", "reg", "t"]
 
 
 def test_commands_hash_stable_and_sensitive():
