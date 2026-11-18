@@ -12,7 +12,7 @@ from compare import quotes_for
 from db import Database
 from models import RateState, User, WiseFee
 from schedule import is_active, seconds_until_next_window
-from settings import ALERT_REFERENCE_SGD, HISTORY_RETENTION_DAYS, RATE_POLL_SECONDS
+from settings import ALERT_REFERENCE_SGD, HISTORY_RETENTION_DAYS, RATE_POLL_SECONDS, TIMEZONE
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +59,29 @@ async def poll_once(
         health.ok("cimb")
         state.cimb_rate, state.cimb_at = rate, now
         db.record_rate("cimb", rate, now)
+
+    if fetchers.wise_live is not None:
+        try:
+            wise = await fetchers.wise_live()
+        except Exception as exc:
+            health.failed("wise", repr(exc))
+            state.wise_rate = None
+        else:
+            health.ok("wise")
+            state.wise_rate, state.wise_at = wise, now
+            db.record_rate("wise", wise, now)
+
+    today = now.astimezone(TIMEZONE).date()
+    if fetchers.wise_fee is not None and state.fee_checked_on != today:
+        state.fee_checked_on = today  # once per day, even if it fails
+        try:
+            fee = await fetchers.wise_fee(ALERT_REFERENCE_SGD)
+        except Exception as exc:
+            health.failed("wise fee", repr(exc))
+        else:
+            health.ok("wise fee")
+            state.wise_fee = fee
+            db.save_wise_fee(fee, now)
 
 
 async def evaluate_users(db: Database, sender: AlertSender, state: RateState, now: datetime) -> None:

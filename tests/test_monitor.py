@@ -86,3 +86,52 @@ def test_evaluate_no_rates_does_nothing():
     db, sender = _db_with_user(), FakeSender()
     asyncio.run(evaluate_users(db, sender, RateState(), NOW))
     assert sender.sent == []
+
+
+# ---- Wise (Phase 2) ------------------------------------------------------
+
+from compare import quotes_for  # noqa: E402
+from models import WiseFee  # noqa: E402
+
+
+def fee_fetcher(fee, calls):
+    async def fetch(amount):
+        calls.append(amount)
+        return fee
+    return fetch
+
+
+def test_both_providers_recorded():
+    db, state, calls = Database(":memory:"), RateState(), []
+    fetchers = Fetchers(cimb=const(3.17), wise_live=const(3.18), wise_fee=fee_fetcher(WiseFee(0.6, 0.003), calls))
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW))
+    assert state.wise_rate == 3.18 and state.wise_at == NOW
+    assert db.rates_since("wise", NOW) == [(NOW, 3.18)]
+    assert state.wise_fee == WiseFee(0.6, 0.003) and db.latest_wise_fee() == WiseFee(0.6, 0.003)
+    assert calls == [1000.0]
+
+
+def test_wise_failure_keeps_cimb_only():
+    db, state = Database(":memory:"), RateState(wise_rate=3.18)
+    fetchers = Fetchers(cimb=const(3.17), wise_live=failing(), wise_fee=fee_fetcher(WiseFee(0.53, 0.0025), []))
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW))
+    assert state.wise_rate is None
+    assert [q.provider for q in quotes_for(state, 1000)] == ["cimb"]
+
+
+def test_fee_checked_once_per_day():
+    db, state, calls = Database(":memory:"), RateState(), []
+    fetchers = Fetchers(cimb=const(3.17), wise_live=const(3.18), wise_fee=fee_fetcher(WiseFee(0.53, 0.0025), calls))
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW))
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW.replace(hour=8)))  # same SGT day (16:00)
+    assert len(calls) == 1
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW.replace(day=19)))
+    assert len(calls) == 2
+
+
+def test_fee_check_failure_keeps_previous_fee():
+    db, state = Database(":memory:"), RateState(wise_fee=WiseFee(0.7, 0.004))
+    fetchers = Fetchers(cimb=const(3.17), wise_live=const(3.18), wise_fee=failing())
+    asyncio.run(poll_once(fetchers, db, state, FetchHealth(), NOW))
+    assert state.wise_fee == WiseFee(0.7, 0.004)
+    assert state.fee_checked_on is not None  # retry tomorrow, not every minute

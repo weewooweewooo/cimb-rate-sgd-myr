@@ -17,7 +17,8 @@ from models import RateState
 from monitor import Fetchers, run_monitor
 from notifier import Notifier
 from providers.cimb import fetch_cimb_rate
-from settings import DB_PATH, HTTP_TIMEOUT_SECONDS, LEGACY_CONFIG_DIR, USER_AGENT, load_secrets
+from providers.wise import fetch_wise_fee, fetch_wise_live
+from settings import ALERT_REFERENCE_SGD, DB_PATH, HTTP_TIMEOUT_SECONDS, LEGACY_CONFIG_DIR, USER_AGENT, load_secrets
 
 log = logging.getLogger("agent")
 
@@ -30,25 +31,44 @@ def make_session() -> aiohttp.ClientSession:
 
 
 def make_fetchers(session: aiohttp.ClientSession) -> Fetchers:
-    return Fetchers(cimb=lambda: fetch_cimb_rate(session))
+    return Fetchers(
+        cimb=lambda: fetch_cimb_rate(session),
+        wise_live=lambda: fetch_wise_live(session),
+        wise_fee=lambda amount: fetch_wise_fee(session, amount),
+    )
+
+
+def initial_state(db: Database) -> RateState:
+    state = RateState()
+    saved_fee = db.latest_wise_fee()
+    if saved_fee is not None:
+        state.wise_fee = saved_fee
+    return state
 
 
 async def check() -> int:
+    failures = 0
     async with make_session() as session:
         try:
-            rate = await fetch_cimb_rate(session)
+            print(f"cimb={await fetch_cimb_rate(session):.4f}")
         except Exception as exc:
             print(f"cimb=ERROR {exc!r}")
-            return 1
-        print(f"cimb={rate:.4f}")
-        return 0
+            failures += 1
+        try:
+            rate = await fetch_wise_live(session)
+            fee = await fetch_wise_fee(session, ALERT_REFERENCE_SGD)
+            print(f"wise={rate:.5f} fee={fee.fixed_sgd:.2f}+{fee.pct * 100:.2f}%")
+        except Exception as exc:
+            print(f"wise=ERROR {exc!r}")
+            failures += 1
+    return 1 if failures else 0
 
 
 async def run() -> None:
     secrets = load_secrets()
     db = Database(DB_PATH)
     db.import_legacy_configs(LEGACY_CONFIG_DIR)
-    state = RateState()
+    state = initial_state(db)
     async with make_session() as session:
         bot = build_bot(db, state, secrets)
         notifier = Notifier(bot, db, state)
