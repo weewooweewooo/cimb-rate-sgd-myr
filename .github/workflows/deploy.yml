@@ -22,7 +22,27 @@ on:
     branches: [main]
 
 jobs:
+  # Run the test suite on the VM's Python version; a failing push never deploys.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python (same as the VM, Debian 13)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       # Step 1: Checkout the code from the repository

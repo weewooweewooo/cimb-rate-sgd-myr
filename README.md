@@ -88,13 +88,13 @@ The `/f` panel is built for phones. Every button edits the same message instead 
 
 ## Deployment Overview
 
-The intended deployment is a small Linux VM running the agent with systemd:
+The intended deployment is a small Linux VM (Debian 13, Python 3.13) running the agent with systemd:
 
 1. Install Python dependencies from `requirements.txt` into `/opt/cimb-rate-sgd-myr/.venv`.
 2. Create `.env` with the Discord token (see below).
 3. Install `cimb-agent.service` under systemd.
 4. Use GitHub Actions Secrets for SSH deployment credentials.
-5. Push to `main` to deploy code changes and restart the service.
+5. Push to `main`: GitHub Actions runs the tests (Python 3.13), and only if they pass deploys the code and restarts the service.
 
 The deployment workflow does not need banking credentials. It deploys code, installs dependencies, copies the service file, reloads systemd and restarts the agent.
 
@@ -137,7 +137,7 @@ To adapt this repository for your own deployment:
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.13 (what the VM and CI use; 3.10+ works)
 - Git
 - Discord bot token
 - Dependencies listed in `requirements.txt` (`discord.py`, `python-dotenv`)

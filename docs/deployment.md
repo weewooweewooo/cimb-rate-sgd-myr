@@ -10,7 +10,7 @@ The project uses **GitHub Actions** to automatically deploy to the GCP VM whenev
 
 ### Deployment Pipeline Flow
 
-1. **Push to main** → GitHub Actions workflow triggers
+1. **Push to main** → GitHub Actions runs the test suite (Python 3.13); a failure stops here
 2. **Checkout code** → Latest code is pulled from the repository
 3. **SSH to VM** → GitHub Actions connects to the GCP VM using SSH
 4. **Pull latest code** → `git pull origin main` on the VM
