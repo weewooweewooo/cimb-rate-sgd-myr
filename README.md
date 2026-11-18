@@ -19,16 +19,17 @@ This repository is prepared as a public template/demo project. It does not log i
 The phone notification preview shows the best effective rate and who offers it:
 
 ```text
-SGD → MYR: 3.1701 (CIMB)
+SGD → MYR: 3.1701 (CIMB) · target 3.1650
 ```
 
 The alert embed:
 
-- ranks CIMB and Wise by MYR received for SGD 1,000
-- shows Wise's fee and the mid-market rate
+- shows the best rate as a heading with its change since the day's first reading (▲ / ▼)
+- ranks CIMB and Wise by MYR received for SGD 1,000 in an aligned table
+- shows Wise's fee and the mid-market rate, with a live "updated 2 minutes ago" timestamp
 - says where the cheaper provider switches, e.g. `Under SGD 1,390 → CIMB · above → Wise`
 
-Underneath, a **Compare** dropdown (200 / 500 / 1,000 / 2,000 / 3,000 / Other…) re-ranks the same message for any amount. **Open Wise** and **Snooze 1h** buttons sit next to it.
+Underneath, a **Compare** dropdown (200 / 500 / 1,000 / 2,000 / 3,000 / Other…) re-ranks the same message for any amount. The embed's side bar is green at or above your target; the `/f` panel also uses amber (within 0.0010 below), grey (below) and blue (no data).
 
 ### Discord Bot Walkthrough
 

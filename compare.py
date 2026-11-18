@@ -42,9 +42,9 @@ def switch_point(cimb_rate: float, wise_rate: float, fee: WiseFee) -> SwitchPoin
 
 def switch_text(sp: SwitchPoint) -> str:
     if sp.kind == "cimb_all":
-        return "CIMB best at every amount"
+        return "CIMB at every amount"
     if sp.kind == "wise_all":
-        return "Wise best at every amount"
+        return "Wise at every amount"
     return f"Under SGD {sp.amount_sgd:,.0f} → CIMB · above → Wise"
 
 

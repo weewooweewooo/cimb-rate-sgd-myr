@@ -189,12 +189,12 @@ def test_switch_point_split():
 
 def test_switch_point_cimb_all():
     assert switch_point(3.1720, 3.17866, FEE).kind == "cimb_all"
-    assert switch_text(SwitchPoint("cimb_all", None)) == "CIMB best at every amount"
+    assert switch_text(SwitchPoint("cimb_all", None)) == "CIMB at every amount"
 
 
 def test_switch_point_wise_all():
     assert switch_point(3.1500, 3.17866, FEE).kind == "wise_all"
-    assert switch_text(SwitchPoint("wise_all", None)) == "Wise best at every amount"
+    assert switch_text(SwitchPoint("wise_all", None)) == "Wise at every amount"
 
 
 @pytest.mark.parametrize(
@@ -240,13 +240,6 @@ def test_below_target_no_peak():
 
 def test_disabled():
     assert decide(u(enabled=False), 3.20, NOW) == "none"
-
-
-def test_snoozed():
-    later = (NOW + timedelta(minutes=30)).isoformat()
-    assert decide(u(snoozed_until=later), 3.20, NOW) == "none"
-    earlier = (NOW - timedelta(minutes=1)).isoformat()
-    assert decide(u(snoozed_until=earlier), 3.20, NOW) == "alert"
 
 
 # ---- SQLite storage --------------------------------------------------------

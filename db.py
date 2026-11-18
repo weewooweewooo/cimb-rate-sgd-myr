@@ -22,8 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
     target_rate REAL NOT NULL,
     enabled INTEGER NOT NULL,
     peak_rate REAL NOT NULL DEFAULT 0,
-    last_alerted_at TEXT,
-    snoozed_until TEXT
+    last_alerted_at TEXT
 );
 CREATE TABLE IF NOT EXISTS rates (
     ts TEXT NOT NULL,

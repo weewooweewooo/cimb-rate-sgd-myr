@@ -15,8 +15,6 @@ def decide(user: User, best_rate: float, now: datetime) -> str:
         return "none"
     if best_rate < user.target_rate:
         return "reset" if user.peak_rate > 0 else "none"
-    if user.snoozed_until and datetime.fromisoformat(user.snoozed_until) > now:
-        return "none"
     if user.peak_rate <= 0:
         return "alert"
     if best_rate >= user.peak_rate + REALERT_STEP - _EPSILON:

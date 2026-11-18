@@ -31,7 +31,6 @@ CIMB_RATE_URL = "https://www.cimbclicks.com.sg/sgd-to-myr"
 WISE_LIVE_URL = "https://wise.com/rates/live"
 WISE_PRICE_URL = "https://wise.com/gateway/v1/price"
 WISE_HISTORY_URL = "https://wise.com/rates/history+live"
-WISE_SEND_URL = "https://wise.com/send"
 WISE_DEFAULT_FEE_PCT = 0.0025
 WISE_DEFAULT_FEE_FIXED_SGD = 0.53
 WISE_ALLOWED_PAYINS = ("PAYNOW", "RECEIVE_BANK_TRANSFER", "FAST_DIRECT_DEBIT")
@@ -42,7 +41,6 @@ COMPARE_PRESETS = (200, 500, 1000, 2000, 3000)
 AMOUNT_MIN_SGD = 10.0
 AMOUNT_MAX_SGD = 100_000.0
 REALERT_STEP = 0.0010
-SNOOZE_MINUTES = 60
 DEFAULT_TARGET = 3.1000
 
 # Storage.

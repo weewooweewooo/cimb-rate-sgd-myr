@@ -15,7 +15,6 @@ class User:
     enabled: bool
     peak_rate: float = 0.0
     last_alerted_at: str | None = None
-    snoozed_until: str | None = None
 
 
 @dataclass(frozen=True)

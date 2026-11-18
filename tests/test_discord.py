@@ -1,6 +1,6 @@
 """Discord side: embeds, commands, panel and alert views, notifier, chart attachments, entrypoint wiring."""
 from datetime import datetime, timedelta, timezone
-from embeds import alert_preview_text, build_alert_embed, build_panel_embed, format_age, format_myr
+from embeds import alert_preview_text, build_alert_embed, build_panel_embed, format_myr
 from models import RateState, User
 import asyncio
 import ui
@@ -40,79 +40,6 @@ def test_format_myr():
     assert format_myr(3169.5) == "RM 3,169.50"
 
 
-def test_format_age():
-    assert format_age(None, NOW) == "no data yet"
-    assert format_age(NOW - timedelta(seconds=20), NOW) == "updated just now"
-    assert format_age(NOW - timedelta(seconds=70), NOW) == "updated 1 min ago"
-    assert format_age(NOW - timedelta(minutes=5), NOW) == "updated 5 min ago"
-
-
-def test_alert_embed_both_providers():
-    e = build_alert_embed(USER, RateState(**BOTH), 1000, NOW)
-    assert e.title == "Target hit: 3.1695 effective (CIMB)"
-    assert e.description == "Mid-market 3.1787 · your target 3.1600"
-    assert e.fields[0].name == "For SGD 1,000:"
-    body = e.fields[0].value
-    assert "1. CIMB" in body and "RM 3,169.50" in body
-    assert "2. Wise" in body and "fee SGD 3.03" in body
-    assert "Best by amount: Under SGD 1,390 → CIMB · above → Wise" in body
-
-
-def test_alert_embed_other_amount_reranks():
-    e = build_alert_embed(USER, RateState(**BOTH), 3000, NOW)
-    assert e.fields[0].name == "For SGD 3,000:"
-    assert e.fields[0].value.splitlines()[0].startswith("1. Wise")
-
-
-def test_alert_embed_cimb_only_has_no_switch_line():
-    e = build_alert_embed(USER, RateState(cimb_rate=3.17), 1000, NOW)
-    assert "Best by amount" not in e.fields[0].value
-    assert "Mid-market" not in (e.description or "")
-
-
-def test_alert_embed_no_rates():
-    e = build_alert_embed(USER, RateState(), 1000, NOW)
-    assert e.fields[0].value == "No rates right now."
-
-
-def test_preview_text():
-    assert alert_preview_text(RateState(cimb_rate=3.1701)) == "SGD → MYR: 3.1701 (CIMB)"
-    assert alert_preview_text(RateState()) == "SGD → MYR: no rate"
-
-
-def test_panel_shows_alert_state_and_amount():
-    state = RateState(**BOTH, cimb_at=NOW - timedelta(seconds=70))
-    e = build_panel_embed(USER, state, 3000, NOW)
-    assert e.title == "SGD → MYR · updated 1 min ago"
-    assert "CIMB 3.1695 · Wise 3.1787 (fee 0.53 + 0.25%)" in e.description
-    assert "Your target 3.1600 · Alerts: On" in e.description
-    assert "For SGD 3,000:  Wise RM 9,510.46 · CIMB RM 9,508.50" in e.description
-
-
-def test_panel_disabled_and_snoozed():
-    user = User("1", "Sean", 3.16, False, snoozed_until=(NOW + timedelta(minutes=30)).isoformat())
-    e = build_panel_embed(user, RateState(cimb_rate=3.17), 1000, NOW)
-    assert "Alerts: Off" in e.description
-    assert "Snoozed until 11:30" in e.description
-
-
-def test_panel_no_data():
-    e = build_panel_embed(USER, RateState(), 1000, NOW)
-    assert e.title == "SGD → MYR · no data yet"
-    assert "No rates yet" in e.description
-
-
-def test_help_embed_lists_every_command():
-    from embeds import build_help_embed
-
-    e = build_help_embed()
-    text = e.description + "".join(f.name + f.value for f in e.fields)
-    for cmd in ("/reg", "/f", "/t", "/a", "/help"):
-        assert cmd in text
-    assert "Mon–Fri" in text and "9am–8pm" in text
-    assert "Compare" in text and "Snooze" in text
-
-
 # ---- commands, views, notifier ---------------------------------------------
 
 
@@ -145,17 +72,6 @@ def test_commands_hash_stable_and_sensitive():
     assert h1 == h2 and h1 != h3
 
 
-def test_alert_view_is_persistent():
-    async def go():
-        return ui.AlertView(Database(":memory:"), RateState())
-
-    view = run(go)
-    assert view.timeout is None
-    ids = {getattr(item, "custom_id", None) for item in view.children}
-    assert {"alert:compare", "alert:snooze"} <= ids
-    assert any(getattr(item, "url", None) == "https://wise.com/send" for item in view.children)
-
-
 def test_compare_select_options():
     async def go():
         return ui.CompareSelect(render=None, custom_id="x", selected=1000)
@@ -164,29 +80,6 @@ def test_compare_select_options():
     assert [o.value for o in select.options] == ["200", "500", "1000", "2000", "3000", "other"]
     assert [o.label for o in select.options][2] == "SGD 1,000"
     assert [o.default for o in select.options][2] is True
-
-
-def _panel_labels(enabled, snoozed_until=None):
-    async def go():
-        db = Database(":memory:")
-        db.create_user("1", "S")
-        db.update_user("1", enabled=enabled, snoozed_until=snoozed_until)
-        view = ui.PanelView(db, RateState(), "1", 1000)
-        return [getattr(item, "label", None) for item in view.children]
-
-    return run(go)
-
-
-def test_panel_view_buttons():
-    labels = _panel_labels(True)
-    assert "Target" in labels and "Alerts: On" in labels and "Refresh" in labels
-    assert "Unsnooze" not in labels
-    assert "Alerts: Off" in _panel_labels(False)
-
-
-def test_panel_view_unsnooze_only_when_snoozed():
-    later = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
-    assert "Unsnooze" in _panel_labels(True, later)
 
 
 HISTORY = parse_wise_history(json.loads((Path(__file__).parent / "fixtures" / "wise_history.json").read_text()))
@@ -451,7 +344,7 @@ def test_panel_update_replaces_chart():
     assert i.response.deferred == [{}]
     (edit,) = i.edits
     assert [f.filename for f in edit["attachments"]] == ["chart.png"]
-    assert "For SGD 3,000" in edit["embed"].description
+    assert edit["embed"].fields[0].name == "For SGD 3,000"
 
 
 def test_panel_without_chart_still_works():
@@ -485,7 +378,6 @@ def test_keep_chart_on_alert_edit():
     assert plain.image.url is None
 
 
-
 def test_no_emoji_in_user_facing_code():
     import re
     from pathlib import Path
@@ -499,3 +391,146 @@ def test_no_emoji_in_user_facing_code():
         if emoji.search(line)
     ]
     assert offenders == []
+
+
+# ---- restyled embeds (no emoji, status colour, live timestamps) -------------
+
+from embeds import AMBER, GREEN, GREY, NO_DATA, build_help_embed, change_text, status_color  # noqa: E402
+
+
+def stamp(dt):
+    return f"<t:{int(dt.timestamp())}:R>"
+
+
+def test_change_text():
+    assert change_text(0.0129) == "▲ +0.0129"
+    assert change_text(-0.0021) == "▼ -0.0021"
+    assert change_text(0.0) == "unchanged"
+    assert change_text(None) == ""
+
+
+def test_status_color():
+    assert status_color(3.1695, 3.16) == GREEN
+    assert status_color(3.1695, 3.17) == AMBER
+    assert status_color(3.1695, 3.18) == GREY
+    assert status_color(None, 3.16) == NO_DATA
+
+
+def test_alert_embed_layout():
+    e = build_alert_embed(USER, RateState(**BOTH), 1000, NOW, changes={"cimb": 0.0129, "wise": -0.0021})
+    assert e.title is None
+    assert e.colour == GREEN
+    assert e.description.splitlines() == [
+        "-# TARGET HIT · CIMB",
+        "## 3.1695 ▲ +0.0129 today",
+        "Mid-market 3.1787 ▼ -0.0021 · your target 3.1600",
+        f"-# Updated {stamp(NOW)}",
+    ]
+    field = e.fields[0]
+    assert field.name == "For SGD 1,000"
+    assert field.value.startswith("```\n1. CIMB   RM 3,169.50\n2. Wise   RM 3,169.03  fee 3.03\n```")
+    assert "**Best by amount:** Under SGD 1,390 → CIMB · above → Wise" in field.value
+    assert "-# Wise fee SGD 0.53 + 0.25% (cheapest PayNow / bank pay-in)" in field.value
+
+
+def test_alert_embed_other_amount_reranks():
+    e = build_alert_embed(USER, RateState(**BOTH), 3000, NOW)
+    assert e.fields[0].name == "For SGD 3,000"
+    assert e.fields[0].value.splitlines()[1].startswith("1. Wise")
+    assert "## 3.1695" in e.description  # heading stays the reference (SGD 1,000) best rate
+
+
+def test_alert_embed_cimb_only():
+    e = build_alert_embed(USER, RateState(cimb_rate=3.17), 1000, NOW)
+    assert "Best by amount" not in e.fields[0].value
+    assert "Wise fee" not in e.fields[0].value
+    assert "Mid-market" not in e.description
+    assert "Your target 3.1600" in e.description
+
+
+def test_alert_embed_no_rates():
+    e = build_alert_embed(USER, RateState(), 1000, NOW)
+    assert "No rates right now." in e.description and e.fields == []
+    assert e.colour == NO_DATA
+
+
+def test_preview_text():
+    assert alert_preview_text(RateState(cimb_rate=3.1701), 3.16) == "SGD → MYR: 3.1701 (CIMB) · target 3.1600"
+    assert alert_preview_text(RateState(), 3.16) == "SGD → MYR: no rate"
+
+
+def test_panel_layout():
+    seen = NOW - timedelta(seconds=70)
+    e = build_panel_embed(USER, RateState(**BOTH, cimb_at=seen), 3000, NOW, changes={"cimb": 0.0129, "wise": 0.0110})
+    assert e.colour == GREEN
+    lines = e.description.splitlines()
+    assert lines[0] == f"-# SGD → MYR · updated {stamp(seen)}"
+    assert "CIMB  3.1695  ▲ +0.0129" in lines
+    assert "Wise  3.1787  ▲ +0.0110  before fee" in lines
+    assert any(line.strip().startswith("3.1690") and line.endswith("after fee, SGD 1,000") for line in lines)
+    assert "**Best by amount:** Under SGD 1,390 → CIMB · above → Wise" in lines
+    assert "Your target **3.1600** · Alerts: **On**" in lines
+    field = e.fields[0]
+    assert field.name == "For SGD 3,000"
+    assert field.value == "```\n1. Wise   RM 9,510.46  fee 8.03\n2. CIMB   RM 9,508.50\n```"
+
+
+def test_panel_colour_and_alert_off():
+    off = User("1", "Sean", 3.17, False)
+    e = build_panel_embed(off, RateState(**BOTH), 1000, NOW)
+    assert e.colour == AMBER
+    assert "Your target **3.1700** · Alerts: **Off**" in e.description
+
+
+def test_panel_no_data():
+    e = build_panel_embed(USER, RateState(), 1000, NOW)
+    assert e.description.splitlines()[0] == "-# SGD → MYR · no data yet"
+    assert "No rates yet — rates update Mon–Fri, 9am–8pm." in e.description
+    assert e.colour == NO_DATA and e.fields == []
+
+
+def test_help_embed_lists_every_command():
+    e = build_help_embed()
+    text = e.description + "".join(f.name + f.value for f in e.fields)
+    for cmd in ("/reg", "/f", "/t", "/a", "/help"):
+        assert cmd in text
+    assert "Mon–Fri" in text and "9am–8pm" in text and "Compare" in text
+    assert "Snooze" not in text and "Open Wise" not in text
+
+
+def test_alert_view_only_has_compare():
+    async def go():
+        return ui.AlertView(Database(":memory:"), RateState())
+
+    view = run(go)
+    assert view.timeout is None
+    assert [getattr(item, "custom_id", None) for item in view.children] == ["alert:compare"]
+
+
+def _panel_labels(enabled):
+    async def go():
+        db = Database(":memory:")
+        db.create_user("1", "S")
+        db.update_user("1", enabled=enabled)
+        view = ui.PanelView(db, RateState(), "1", 1000)
+        return [getattr(item, "label", None) for item in view.children]
+
+    return run(go)
+
+
+def test_panel_view_buttons():
+    labels = _panel_labels(True)
+    assert labels[:3] == ["Target", "Alerts: On", "Refresh"]
+    assert "Alerts: Off" in _panel_labels(False)
+
+
+def test_today_changes_from_first_reading_of_the_day():
+    db = Database(":memory:")
+    yesterday = NOW - timedelta(days=1)
+    db.record_rate("cimb", 3.10, yesterday)
+    db.record_rate("cimb", 3.1796, NOW - timedelta(hours=1))  # 10:00 SGT, first today
+    db.record_rate("cimb", 3.1850, NOW)
+    changes = ui.today_changes(db, RateState(cimb_rate=3.1925, wise_rate=3.18), NOW)
+    assert round(changes["cimb"], 4) == 0.0129
+    assert changes.get("wise") is None
+

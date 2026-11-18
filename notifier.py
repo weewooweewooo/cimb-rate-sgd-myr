@@ -11,7 +11,7 @@ from db import Database
 from embeds import alert_preview_text, build_alert_embed
 from models import RateState, User
 from settings import ALERT_REFERENCE_SGD
-from ui import AlertView
+from ui import AlertView, today_changes
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +43,12 @@ class Notifier:
         if target is None:
             return False
         now = datetime.now(timezone.utc)
-        embed = build_alert_embed(user, state, ALERT_REFERENCE_SGD, now)
-        kwargs = {"content": alert_preview_text(state), "embed": embed, "view": AlertView(self.db, state)}
+        embed = build_alert_embed(user, state, ALERT_REFERENCE_SGD, now, today_changes(self.db, state, now))
+        kwargs = {
+            "content": alert_preview_text(state, user.target_rate),
+            "embed": embed,
+            "view": AlertView(self.db, state),
+        }
         chart = await self.chart_maker.make(user.target_rate, state, now) if self.chart_maker else None
         if chart is not None:
             embed.set_image(url=f"attachment://{CHART_FILENAME}")

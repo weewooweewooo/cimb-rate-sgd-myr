@@ -1,8 +1,8 @@
-"""Discord views and modals: compare dropdown, alert buttons, /f panel."""
+"""Discord views and modals: compare dropdown on alerts, /f panel."""
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Awaitable, Callable
 
 import discord
@@ -10,8 +10,8 @@ import discord
 from compare import parse_amount
 from db import Database
 from embeds import build_alert_embed, build_panel_embed
-from models import RateState, User
-from settings import COMPARE_PRESETS, SNOOZE_MINUTES, TIMEZONE, WISE_SEND_URL
+from models import RateState
+from settings import COMPARE_PRESETS, TIMEZONE
 
 if TYPE_CHECKING:
     from chart_service import ChartMaker
@@ -38,8 +38,15 @@ def keep_chart(embed: discord.Embed, message: object) -> None:
         embed.set_image(url=f"attachment://{CHART_FILENAME}")
 
 
-def _is_snoozed(user: User, now: datetime) -> bool:
-    return bool(user.snoozed_until) and datetime.fromisoformat(user.snoozed_until) > now
+def today_changes(db: Database, state: RateState, now: datetime) -> dict[str, float]:
+    """Change of each provider's rate since its first reading today (Singapore time)."""
+    midnight = now.astimezone(TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
+    changes: dict[str, float] = {}
+    for provider, current in (("cimb", state.cimb_rate), ("wise", state.wise_rate)):
+        rows = db.rates_since(provider, midnight)
+        if current is not None and rows:
+            changes[provider] = current - rows[0][1]
+    return changes
 
 
 class AmountModal(discord.ui.Modal, title="Compare amount"):
@@ -77,34 +84,22 @@ class CompareSelect(discord.ui.Select):
 
 
 class AlertView(discord.ui.View):
-    """Buttons on alert DMs. Persistent: registered once at startup."""
+    """Compare dropdown on alert DMs. Persistent: registered once at startup."""
 
     def __init__(self, db: Database, state: RateState, selected: float = 1000.0):
         super().__init__(timeout=None)
         self.db, self.state = db, state
         self.add_item(CompareSelect(self._render, "alert:compare", selected))
-        self.add_item(discord.ui.Button(label="Open Wise", url=WISE_SEND_URL))
-        snooze = discord.ui.Button(label=f"Snooze {SNOOZE_MINUTES // 60}h", custom_id="alert:snooze")
-        snooze.callback = self._snooze
-        self.add_item(snooze)
 
     async def _render(self, interaction: discord.Interaction, amount: float) -> None:
         user = self.db.get_user(str(interaction.user.id))
         if user is None:
             await interaction.response.send_message(NOT_REGISTERED, ephemeral=True)
             return
-        embed = build_alert_embed(user, self.state, amount, _now())
+        now = _now()
+        embed = build_alert_embed(user, self.state, amount, now, today_changes(self.db, self.state, now))
         keep_chart(embed, interaction.message)
         await interaction.response.edit_message(embed=embed, view=AlertView(self.db, self.state, amount))
-
-    async def _snooze(self, interaction: discord.Interaction) -> None:
-        until = _now() + timedelta(minutes=SNOOZE_MINUTES)
-        if not self.db.update_user(str(interaction.user.id), snoozed_until=until.isoformat()):
-            await interaction.response.send_message(NOT_REGISTERED, ephemeral=True)
-            return
-        await interaction.response.send_message(
-            f"Snoozed until {until.astimezone(TIMEZONE):%H:%M}.", ephemeral=True
-        )
 
 
 async def show_panel(
@@ -127,7 +122,7 @@ async def show_panel(
     else:
         await interaction.response.defer(ephemeral=True, thinking=True)
     now = _now()
-    embed = build_panel_embed(user, state, amount, now)
+    embed = build_panel_embed(user, state, amount, now, today_changes(db, state, now))
     chart = await chart_maker.make(user.target_rate, state, now) if chart_maker else None
     files = [chart] if chart is not None else []
     if chart is not None:
@@ -180,8 +175,6 @@ class PanelView(discord.ui.View):
             self._toggle,
         )
         self._button("Refresh", discord.ButtonStyle.secondary, self._refresh)
-        if user and _is_snoozed(user, _now()):
-            self._button("Unsnooze", discord.ButtonStyle.secondary, self._unsnooze)
         self.add_item(CompareSelect(self._compare, None, amount))
 
     def _button(self, label: str, style: discord.ButtonStyle, callback) -> None:
@@ -206,10 +199,6 @@ class PanelView(discord.ui.View):
         await self._rerender(interaction)
 
     async def _refresh(self, interaction: discord.Interaction) -> None:
-        await self._rerender(interaction)
-
-    async def _unsnooze(self, interaction: discord.Interaction) -> None:
-        self.db.update_user(self.user_id, snoozed_until=None)
         await self._rerender(interaction)
 
     async def _compare(self, interaction: discord.Interaction, amount: float) -> None:
