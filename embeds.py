@@ -12,7 +12,7 @@ from settings import ALERT_REFERENCE_SGD, TIMEZONE
 ALERT_COLOR = discord.Color.from_rgb(226, 75, 74)
 PANEL_COLOR = discord.Color.blurple()
 NAMES = {"cimb": "CIMB", "wise": "Wise"}
-MEDALS = ("🥇", "🥈")
+RANKS = ("1.", "2.")
 
 
 def format_myr(amount: float) -> str:
@@ -37,8 +37,8 @@ def _switch_line(state: RateState) -> str | None:
 
 
 def _quote_line(index: int, quote: Quote) -> str:
-    medal = MEDALS[index] if index < len(MEDALS) else "  "
-    line = f"{medal} {NAMES[quote.provider]}   {format_myr(quote.received_myr)}"
+    rank = RANKS[index] if index < len(RANKS) else f"{index + 1}."
+    line = f"{rank} {NAMES[quote.provider]}   {format_myr(quote.received_myr)}"
     if quote.fee_sgd:
         line += f"   fee SGD {quote.fee_sgd:.2f}"
     return line
@@ -56,9 +56,9 @@ def build_alert_embed(user: User, state: RateState, amount_sgd: float, now: date
     reference = quotes_for(state, ALERT_REFERENCE_SGD)
     if reference:
         best = reference[0]
-        title = f"💱 Target hit: {best.effective_rate:.4f} effective ({NAMES[best.provider]})"
+        title = f"Target hit: {best.effective_rate:.4f} effective ({NAMES[best.provider]})"
     else:
-        title = "💱 SGD → MYR"
+        title = "SGD → MYR"
     parts = []
     if state.wise_rate is not None:
         parts.append(f"Mid-market {state.wise_rate:.4f}")
@@ -71,7 +71,7 @@ def build_alert_embed(user: User, state: RateState, amount_sgd: float, now: date
         lines = [_quote_line(i, q) for i, q in enumerate(quotes)]
         switch = _switch_line(state)
         if switch:
-            lines += ["", f"💡 {switch}"]
+            lines += ["", f"Best by amount: {switch}"]
         body = "\n".join(lines)
     else:
         body = "No rates right now."
@@ -83,7 +83,7 @@ def build_alert_embed(user: User, state: RateState, amount_sgd: float, now: date
 
 def build_panel_embed(user: User, state: RateState, amount_sgd: float, now: datetime) -> discord.Embed:
     stamps = [t for t in (state.cimb_at, state.wise_at) if t is not None]
-    title = f"⚙️ SGD → MYR · {format_age(max(stamps) if stamps else None, now)}"
+    title = f"SGD → MYR · {format_age(max(stamps) if stamps else None, now)}"
 
     rates = []
     if state.cimb_rate is not None:
@@ -95,13 +95,13 @@ def build_panel_embed(user: User, state: RateState, amount_sgd: float, now: date
 
     switch = _switch_line(state)
     if switch:
-        lines.append(f"💡 {switch}")
-    alerts = "🔔 On" if user.enabled else "🔕 Off"
-    lines.append(f"Your target {user.target_rate:.4f} · Alerts {alerts}")
+        lines.append(f"Best by amount: {switch}")
+    alerts = "On" if user.enabled else "Off"
+    lines.append(f"Your target {user.target_rate:.4f} · Alerts: {alerts}")
     if user.snoozed_until:
         until = datetime.fromisoformat(user.snoozed_until)
         if until > now:
-            lines.append(f"😴 Snoozed until {until.astimezone(TIMEZONE):%H:%M}")
+            lines.append(f"Snoozed until {until.astimezone(TIMEZONE):%H:%M}")
 
     quotes = quotes_for(state, amount_sgd)
     if quotes:

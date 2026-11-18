@@ -49,24 +49,24 @@ def test_format_age():
 
 def test_alert_embed_both_providers():
     e = build_alert_embed(USER, RateState(**BOTH), 1000, NOW)
-    assert e.title == "💱 Target hit: 3.1695 effective (CIMB)"
+    assert e.title == "Target hit: 3.1695 effective (CIMB)"
     assert e.description == "Mid-market 3.1787 · your target 3.1600"
     assert e.fields[0].name == "For SGD 1,000:"
     body = e.fields[0].value
-    assert "🥇 CIMB" in body and "RM 3,169.50" in body
-    assert "🥈 Wise" in body and "fee SGD 3.03" in body
-    assert "💡 Under SGD 1,390 → CIMB · above → Wise" in body
+    assert "1. CIMB" in body and "RM 3,169.50" in body
+    assert "2. Wise" in body and "fee SGD 3.03" in body
+    assert "Best by amount: Under SGD 1,390 → CIMB · above → Wise" in body
 
 
 def test_alert_embed_other_amount_reranks():
     e = build_alert_embed(USER, RateState(**BOTH), 3000, NOW)
     assert e.fields[0].name == "For SGD 3,000:"
-    assert e.fields[0].value.splitlines()[0].startswith("🥇 Wise")
+    assert e.fields[0].value.splitlines()[0].startswith("1. Wise")
 
 
 def test_alert_embed_cimb_only_has_no_switch_line():
     e = build_alert_embed(USER, RateState(cimb_rate=3.17), 1000, NOW)
-    assert "💡" not in e.fields[0].value
+    assert "Best by amount" not in e.fields[0].value
     assert "Mid-market" not in (e.description or "")
 
 
@@ -83,22 +83,22 @@ def test_preview_text():
 def test_panel_shows_alert_state_and_amount():
     state = RateState(**BOTH, cimb_at=NOW - timedelta(seconds=70))
     e = build_panel_embed(USER, state, 3000, NOW)
-    assert e.title == "⚙️ SGD → MYR · updated 1 min ago"
+    assert e.title == "SGD → MYR · updated 1 min ago"
     assert "CIMB 3.1695 · Wise 3.1787 (fee 0.53 + 0.25%)" in e.description
-    assert "Your target 3.1600 · Alerts 🔔 On" in e.description
+    assert "Your target 3.1600 · Alerts: On" in e.description
     assert "For SGD 3,000:  Wise RM 9,510.46 · CIMB RM 9,508.50" in e.description
 
 
 def test_panel_disabled_and_snoozed():
     user = User("1", "Sean", 3.16, False, snoozed_until=(NOW + timedelta(minutes=30)).isoformat())
     e = build_panel_embed(user, RateState(cimb_rate=3.17), 1000, NOW)
-    assert "Alerts 🔕 Off" in e.description
-    assert "😴 Snoozed until 11:30" in e.description
+    assert "Alerts: Off" in e.description
+    assert "Snoozed until 11:30" in e.description
 
 
 def test_panel_no_data():
     e = build_panel_embed(USER, RateState(), 1000, NOW)
-    assert e.title == "⚙️ SGD → MYR · no data yet"
+    assert e.title == "SGD → MYR · no data yet"
     assert "No rates yet" in e.description
 
 
@@ -179,9 +179,9 @@ def _panel_labels(enabled, snoozed_until=None):
 
 def test_panel_view_buttons():
     labels = _panel_labels(True)
-    assert "🎯 Target" in labels and "🔔 Alerts: On" in labels and "🔄 Refresh" in labels
+    assert "Target" in labels and "Alerts: On" in labels and "Refresh" in labels
     assert "Unsnooze" not in labels
-    assert "🔕 Alerts: Off" in _panel_labels(False)
+    assert "Alerts: Off" in _panel_labels(False)
 
 
 def test_panel_view_unsnooze_only_when_snoozed():
@@ -483,3 +483,19 @@ def test_keep_chart_on_alert_edit():
     plain = discord.Embed(title="y")
     ui.keep_chart(plain, SimpleNamespace(attachments=[]))
     assert plain.image.url is None
+
+
+
+def test_no_emoji_in_user_facing_code():
+    import re
+    from pathlib import Path
+
+    emoji = re.compile("[☀-➿🌀-🫿️]")
+    root = Path(__file__).resolve().parent.parent
+    offenders = [
+        f"{path.name}:{n}"
+        for path in root.glob("*.py")
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if emoji.search(line)
+    ]
+    assert offenders == []

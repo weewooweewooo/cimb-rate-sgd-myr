@@ -103,7 +103,7 @@ class AlertView(discord.ui.View):
             await interaction.response.send_message(NOT_REGISTERED, ephemeral=True)
             return
         await interaction.response.send_message(
-            f"😴 Snoozed until {until.astimezone(TIMEZONE):%H:%M}.", ephemeral=True
+            f"Snoozed until {until.astimezone(TIMEZONE):%H:%M}.", ephemeral=True
         )
 
 
@@ -173,13 +173,13 @@ class PanelView(discord.ui.View):
         user = db.get_user(user_id)
         enabled = bool(user and user.enabled)
 
-        self._button("🎯 Target", discord.ButtonStyle.primary, self._target)
+        self._button("Target", discord.ButtonStyle.primary, self._target)
         self._button(
-            "🔔 Alerts: On" if enabled else "🔕 Alerts: Off",
+            "Alerts: On" if enabled else "Alerts: Off",
             discord.ButtonStyle.success if enabled else discord.ButtonStyle.secondary,
             self._toggle,
         )
-        self._button("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh)
+        self._button("Refresh", discord.ButtonStyle.secondary, self._refresh)
         if user and _is_snoozed(user, _now()):
             self._button("Unsnooze", discord.ButtonStyle.secondary, self._unsnooze)
         self.add_item(CompareSelect(self._compare, None, amount))

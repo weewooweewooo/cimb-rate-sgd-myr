@@ -86,7 +86,7 @@ class RateCommands(commands.Cog):
         enabled = mode.value == "on"
         self.bot.db.update_user(str(interaction.user.id), enabled=enabled)
         await interaction.response.send_message(
-            "🔔 Alerts on." if enabled else "🔕 Alerts off.", ephemeral=True
+            "Alerts on." if enabled else "Alerts off.", ephemeral=True
         )
 
     @app_commands.command(name="f", description="Open your rates and settings panel")
