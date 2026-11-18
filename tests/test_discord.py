@@ -428,7 +428,7 @@ def test_alert_embed_layout():
     ]
     field = e.fields[0]
     assert field.name == "For SGD 1,000"
-    assert field.value.startswith("```\n1. CIMB   RM 3,169.50\n2. Wise   RM 3,169.03  fee 3.03\n```")
+    assert field.value.startswith("```\n1. CIMB   RM 3,169.50\n2. Wise   RM 3,169.03  after SGD 3.03 fee\n```")
     assert "**Best by amount:** Under SGD 1,390 → CIMB · above → Wise" in field.value
     assert "-# Wise fee SGD 0.53 + 0.25% (cheapest PayNow / bank pay-in)" in field.value
 
@@ -472,7 +472,7 @@ def test_panel_layout():
     assert "Your target **3.1600** · Alerts: **On**" in lines
     field = e.fields[0]
     assert field.name == "For SGD 3,000"
-    assert field.value == "```\n1. Wise   RM 9,510.46  fee 8.03\n2. CIMB   RM 9,508.50\n```"
+    assert field.value == "```\n1. Wise   RM 9,510.46  after SGD 8.03 fee\n2. CIMB   RM 9,508.50\n```"
 
 
 def test_panel_colour_and_alert_off():

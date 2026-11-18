@@ -67,7 +67,7 @@ def _ranking_block(quotes: list[Quote]) -> str:
     for index, quote in enumerate(quotes, start=1):
         row = f"{index}. {NAMES[quote.provider]:<4}  {format_myr(quote.received_myr):>12}"
         if quote.fee_sgd:
-            row += f"  fee {quote.fee_sgd:.2f}"
+            row += f"  after SGD {quote.fee_sgd:.2f} fee"
         rows.append(row)
     return "```\n" + "\n".join(rows) + "\n```"
 
