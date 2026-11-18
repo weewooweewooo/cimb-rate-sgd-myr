@@ -1,67 +1,46 @@
+"""Send alert DMs."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from datetime import datetime, timezone
 
 import discord
 
+from db import Database
+from embeds import alert_preview_text, build_alert_embed
+from models import RateState, User
+from settings import ALERT_REFERENCE_SGD
+from ui import AlertView
 
-# Store user and rate data needed for alert DMs.
-@dataclass
-class AlertPayload:
-    discord_user_id: str
-    user_name: str
-    rate: float
-    target_rate: float
-    active_start: str
-    active_end: str
+log = logging.getLogger(__name__)
 
 
-# Send Discord DM alerts for qualifying rates.
-class DiscordNotifier:
-    # Store the Discord client used for user lookup and DMs.
-    def __init__(self, bot: discord.Client):
-        self.bot = bot
+class Notifier:
+    def __init__(self, bot: discord.Client, db: Database, state: RateState):
+        self.bot, self.db, self.state = bot, db, state
 
-    # Resolve a Discord user from cache or API.
-    async def _get_user(self, discord_user_id: str) -> discord.User | None:
-        user = self.bot.get_user(int(discord_user_id))
+    async def _get_user(self, user_id: str) -> discord.User | None:
+        user = self.bot.get_user(int(user_id))
         if user is not None:
             return user
         try:
-            return await self.bot.fetch_user(int(discord_user_id))
-        except Exception as exc:
-            print(f"[notifier] fetch user failed {discord_user_id}: {exc}")
+            return await self.bot.fetch_user(int(user_id))
+        except discord.DiscordException as exc:
+            log.error("fetch user %s failed: %r", user_id, exc)
             return None
 
-    # Build the rate alert embed.
-    def _build_embed(self, payload: AlertPayload) -> discord.Embed:
-        embed = discord.Embed(
-            title="SGD \u2192 MYR Rate Alert",
-            color=discord.Color.from_rgb(226, 75, 74),
-        )
-        embed.add_field(name="Live Rate", value=f"**{payload.rate:.4f}**", inline=True)
-        embed.add_field(
-            name="Your Target", value=f"{payload.target_rate:.4f}", inline=True
-        )
-        embed.add_field(
-            name="Active Window",
-            value=f"{payload.active_start} \u2013 {payload.active_end}",
-            inline=False,
-        )
-        embed.set_footer(text="Open CIMB app to transfer now \u00b7 SGD \u2192 MYR")
-        return embed
-
-    # Send a rate alert embed to a user's DM.
-    async def send_rate_alert(self, payload: AlertPayload) -> bool:
-        user = await self._get_user(payload.discord_user_id)
-        if user is None:
+    async def send_alert(self, user: User, state: RateState) -> bool:
+        target = await self._get_user(user.discord_user_id)
+        if target is None:
             return False
+        now = datetime.now(timezone.utc)
         try:
-            await user.send(
-                content=f"SGD → MYR: {payload.rate:.4f}",
-                embed=self._build_embed(payload),
+            await target.send(
+                content=alert_preview_text(state),
+                embed=build_alert_embed(user, state, ALERT_REFERENCE_SGD, now),
+                view=AlertView(self.db, state),
             )
-            return True
-        except Exception as exc:
-            print(f"[notifier] dm failed to {payload.discord_user_id}: {exc}")
+        except discord.DiscordException as exc:
+            log.error("DM to %s failed: %r", user.discord_user_id, exc)
             return False
+        return True
