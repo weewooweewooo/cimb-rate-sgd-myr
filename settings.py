@@ -54,7 +54,10 @@ class Secrets:
 
 
 def load_secrets() -> Secrets:
-    load_dotenv()
+    try:
+        load_dotenv()
+    except OSError:
+        pass  # .env unreadable by this user; systemd's EnvironmentFile still provides the token
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("DISCORD_BOT_TOKEN is required")

@@ -511,3 +511,12 @@ def test_render_png_with_wise_net():
     net = [(t, v * 0.997) for t, v in HISTORY[-168:]]
     png = render_chart(HISTORY[-168:], [(end, 3.17)], 3.16, 3.18, (3.175, 3.185), 72, wise_net=net)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_load_secrets_survives_unreadable_env_file(monkeypatch):
+    def unreadable():
+        raise PermissionError("Permission denied: '.env'")
+
+    monkeypatch.setattr(settings, "load_dotenv", unreadable)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "from-systemd")
+    assert settings.load_secrets() == settings.Secrets("from-systemd")
