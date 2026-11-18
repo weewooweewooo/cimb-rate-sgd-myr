@@ -100,6 +100,27 @@ async def register_commands(bot: "RateBot") -> None:
     await bot.add_cog(RateCommands(bot))
 
 
+async def sync_commands(bot: "RateBot") -> None:
+    """Sync slash commands only when they changed. Failures never stop startup."""
+    digest = commands_hash(bot.tree)
+    if bot.db.get_meta("commands_hash") != digest:
+        try:
+            await bot.tree.sync()
+        except discord.DiscordException as exc:
+            log.error("command sync failed (will retry next start): %r", exc)
+        else:
+            bot.db.set_meta("commands_hash", digest)
+    guild_id = bot.secrets.discord_guild_id
+    if guild_id and bot.db.get_meta("guild_cleanup_done") is None:
+        guild = discord.Object(id=guild_id)
+        try:
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)
+        except discord.DiscordException as exc:
+            log.error("old guild command cleanup failed (not retried): %r", exc)
+        bot.db.set_meta("guild_cleanup_done", "1")
+
+
 class RateBot(commands.Bot):
     def __init__(self, db: Database, state: RateState, secrets: Secrets):
         super().__init__(command_prefix="!", intents=discord.Intents.none())
@@ -108,16 +129,7 @@ class RateBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.add_view(AlertView(self.db, self.state))
         await register_commands(self)
-        digest = commands_hash(self.tree)
-        if self.db.get_meta("commands_hash") != digest:
-            await self.tree.sync()
-            self.db.set_meta("commands_hash", digest)
-        guild_id = self.secrets.discord_guild_id
-        if guild_id and self.db.get_meta("guild_cleanup_done") is None:
-            guild = discord.Object(id=guild_id)
-            self.tree.clear_commands(guild=guild)
-            await self.tree.sync(guild=guild)
-            self.db.set_meta("guild_cleanup_done", "1")
+        await sync_commands(self)
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: Exception) -> None:
         log.error("command %s failed: %r", getattr(interaction.command, "name", "?"), error)

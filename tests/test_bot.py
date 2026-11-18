@@ -139,3 +139,47 @@ def test_alert_without_chart_when_history_fails():
     assert ok and len(sent) == 1
     assert "file" not in sent[0]
     assert sent[0]["embed"].image.url is None
+
+
+# ---- command sync must never stop the bot from starting --------------------
+
+import discord  # noqa: E402
+
+from bot import sync_commands  # noqa: E402
+
+
+def test_sync_failures_do_not_raise():
+    async def go():
+        bot = build_bot(Database(":memory:"), RateState(), Secrets("x", 123))
+        await register_commands(bot)
+
+        async def boom(*args, **kwargs):
+            raise discord.DiscordException("forbidden")
+
+        bot.tree.sync = boom
+        await sync_commands(bot)
+        return bot.db.get_meta("commands_hash"), bot.db.get_meta("guild_cleanup_done")
+
+    stored_hash, cleanup_done = asyncio.run(go())
+    assert stored_hash is None  # retry the global sync next start
+    assert cleanup_done == "1"  # but never retry the cosmetic guild cleanup
+
+
+def test_sync_success_stores_hash_once():
+    calls = []
+
+    async def go():
+        bot = build_bot(Database(":memory:"), RateState(), Secrets("x", None))
+        await register_commands(bot)
+
+        async def ok(*args, **kwargs):
+            calls.append(kwargs)
+            return []
+
+        bot.tree.sync = ok
+        await sync_commands(bot)
+        await sync_commands(bot)
+        return bot.db.get_meta("commands_hash"), commands_hash(bot.tree)
+
+    stored, expected = asyncio.run(go())
+    assert stored == expected and len(calls) == 1
